@@ -1,0 +1,57 @@
+name: tech
+display_name: "Tech & AI News"
+
+script:
+  tone: "informed, slightly opinionated, conversational"
+  pacing: "fast, dense with facts, no filler"
+  hooks:
+    - id: contrarian_take
+      template: "Everyone is celebrating {topic}. Here's why that's a problem."
+    - id: breaking_news
+      template: "This just happened and nobody is talking about it."
+    - id: prediction
+      template: "{topic} changes everything. Here's what happens next."
+    - id: explainer
+      template: "Let me explain {topic} in 60 seconds because most people are getting this wrong."
+    - id: comparison
+      template: "{thing_a} vs {thing_b}. One of these wins and it's not even close."
+  cta_variants:
+    - "Follow for daily tech breakdowns."
+    - "Subscribe. I cover AI news nobody else is talking about."
+    - "Drop a comment: do you agree?"
+  word_count: "150 to 170"
+  forbidden: ["like and subscribe", "smash that bell", "what's up guys"]
+
+visuals:
+  style: "clean, minimal, dark backgrounds, neon accents"
+  mood: "futuristic, sleek, professional"
+  subjects:
+    prefer: ["circuit boards", "code on screens", "server rooms", "product shots", "data visualizations"]
+    avoid: ["stock photo people smiling at laptops", "generic office", "clipart"]
+  prompt_suffix: "photorealistic, cinematic lighting, high quality"
+
+voice:
+  pace: "slightly fast, ~160 wpm"
+  energy: "confident, authoritative but not robotic"
+  suggested_voices:
+    edge_tts: "en-US-GuyNeural"
+    elevenlabs: "JBFqnCBsd6RMkjVDRZzb"
+    dashscope: "longanyang"
+
+captions:
+  highlight_color: "#00FF88"
+  text_color: "#FFFFFF"
+  font_size: 72
+  font_weight: "bold"
+  words_per_group: 4
+  position: "lower_third"
+
+music:
+  mood: "ambient electronic, subtle energy, no lyrics"
+  energy: "medium"
+  duck_volume_speech: 0.12
+  duck_volume_gap: 0.25
+
+thumbnail:
+  style: "dark background, bold white/green text, product or face focus"
+  text_position: "left_aligned"

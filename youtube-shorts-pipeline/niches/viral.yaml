@@ -1,0 +1,108 @@
+name: viral
+display_name: "病毒传播文案"
+
+script:
+  tone: "震撼、悬念、情绪冲击、引发共鸣"
+  pacing: "快节奏、短句、密集信息点、每句都有钩子"
+  word_count: "120 to 150"
+  sentence_style: "短句为主，每句不超过15字，避免长句"
+
+  # 病毒传播hook模式
+  hooks:
+    - id: shock_fact
+      template: "你知道吗？{topic}。这个数字让我震惊..."
+      when: "有具体数据/统计时"
+    - id: counter_intuitive
+      template: "所有人都以为{topic}。但真相是..."
+      when: "有反常识观点时"
+    - id: fear_trigger
+      template: "如果你还在{wrong_action}，那你可能正在..."
+      when: "有警示/风险内容时"
+    - id: curiosity_gap
+      template: "我发现了一个秘密，关于{topic}..."
+      when: "有神秘/未知元素时"
+    - id: social_proof
+      template: "已经有{count}人因为{topic}改变了..."
+      when: "有社会现象/趋势时"
+    - id: story_hook
+      template: "昨天我看到{event}，让我彻底明白了..."
+      when: "有故事/案例时"
+
+  # 病毒传播CTA
+  cta_variants:
+    - "转发给需要的人。"
+    - "评论区告诉我你的看法。"
+    - "关注我，每天一个震撼真相。"
+    - "点赞收藏，下次找得到。"
+    - "你身边有这样的人吗？"
+
+  # 禁止使用的陈词滥调
+  forbidden_phrases:
+    - "大家好"
+    - "今天我们来聊聊"
+    - "众所周知"
+    - "首先其次最后"
+    - "喜欢的朋友点个赞"
+    - "记得关注我"
+    - "感谢观看"
+    - "下期再见"
+
+  # 病毒传播结构
+  structure:
+    opening: "前3秒必须有钩子，制造悬念或冲击"
+    middle: "密集信息点，每15秒一个转折"
+    closing: "情绪高潮+强CTA，引导互动"
+
+visuals:
+  style: "高对比度、视觉冲击、动态感"
+  mood: "紧张、神秘、震撼"
+  subjects:
+    prefer:
+      - "人物表情特写"
+      - "数据可视化图表"
+      - "对比画面"
+      - "动态场景"
+      - "情绪化场景"
+    avoid:
+      - "静态风景"
+      - "平淡办公场景"
+      - "模糊画面"
+  prompt_suffix: "高对比度，视觉冲击力强，电影级画质"
+
+voice:
+  pace: "快，约180 wpm"
+  energy: "强烈、有感染力"
+  style: "情绪化、有起伏"
+  suggested_voices:
+    dashscope: "longanyang"
+    edge_tts: "zh-CN-XiaoxiaoNeural"
+
+captions:
+  highlight_color: "#FF0000"
+  text_color: "#FFFFFF"
+  font_size: 80
+  font_weight: "bold"
+  position: "center"
+  words_per_group: 3  # 病毒传播用更短的词组
+
+music:
+  mood: "紧张、悬疑、节奏感强"
+  energy: "high"
+  duck_volume_speech: 0.08
+  duck_volume_gap: 0.20
+
+thumbnail:
+  style: "高对比度、大字标题、表情特写"
+  text_position: "center"
+  guidelines:
+    - "标题不超过5个字"
+    - "必须有视觉焦点"
+    - "颜色对比强烈"
+
+discovery:
+  # 病毒传播话题发现源
+  hot_sources:
+    - "微博热搜"
+    - "抖音热点"
+    - "知乎热榜"
+    - "今日头条"

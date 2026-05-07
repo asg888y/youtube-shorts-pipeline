@@ -1,0 +1,42 @@
+name: general
+display_name: "General"
+
+script:
+  tone: "clear, engaging, conversational"
+  pacing: "moderate, well structured"
+  word_count: "150 to 180"
+  hooks:
+    - id: question
+      template: "Did you know {topic}?"
+    - id: surprising_fact
+      template: "Here's something most people don't know about {topic}."
+  cta_variants:
+    - "Follow for more."
+    - "Subscribe for daily content."
+
+visuals:
+  style: "cinematic, professional"
+  mood: "neutral, engaging"
+  prompt_suffix: "photorealistic, cinematic lighting, high quality"
+
+voice:
+  pace: "moderate"
+  energy: "engaging"
+  suggested_voices:
+    edge_tts: "en-US-GuyNeural"
+
+captions:
+  highlight_color: "#FFFF00"
+  text_color: "#FFFFFF"
+  font_size: 72
+  font_weight: "bold"
+  words_per_group: 4
+
+music:
+  mood: "ambient, subtle, no lyrics"
+  energy: "medium"
+  duck_volume_speech: 0.12
+  duck_volume_gap: 0.25
+
+thumbnail:
+  style: "clean, bold text, eye-catching"
