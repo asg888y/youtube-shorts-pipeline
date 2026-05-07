@@ -24,6 +24,10 @@ sys.path.insert(0, str(PROJECT_DIR))
 from verticals.config import CONFIG_FILE, DRAFTS_DIR, MEDIA_DIR
 from verticals.log import log
 
+# ffmpeg-full 路径（包含libass字幕滤镜支持）
+FFMPEG = "/opt/homebrew/Cellar/ffmpeg-full/8.1.1/bin/ffmpeg"
+FFPROBE = "/opt/homebrew/Cellar/ffmpeg-full/8.1.1/bin/ffprobe"
+
 
 def get_hot_topics(limit: int = 10) -> list:
     """获取热点话题列表"""
@@ -311,13 +315,13 @@ def _assemble_mixed(
 
     merged_video = work_dir / "merged_video.mp4"
     subprocess.run([
-        "ffmpeg", "-f", "concat", "-safe", "0", "-i", str(concat_file),
+        FFMPEG, "-f", "concat", "-safe", "0", "-i", str(concat_file),
         "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
         str(merged_video), "-y", "-loglevel", "quiet",
     ], check=True)
 
     # 合成最终视频：视频+语音+字幕+音乐
-    cmd = ["ffmpeg", "-i", str(merged_video), "-i", str(vo_path)]
+    cmd = [FFMPEG, "-i", str(merged_video), "-i", str(vo_path)]
 
     # 音频处理
     if music_path:
@@ -354,7 +358,7 @@ def _assemble_mixed(
         log(f"ffmpeg错误: {result.stderr[:500]}")
         # 尝试不带字幕合成
         log("尝试不带字幕合成...")
-        cmd_no_sub = ["ffmpeg", "-i", str(merged_video), "-i", str(vo_path)]
+        cmd_no_sub = [FFMPEG, "-i", str(merged_video), "-i", str(vo_path)]
         if music_path:
             cmd_no_sub += ["-stream_loop", "-1", "-i", str(music_path), "-filter_complex", audio_filter]
             cmd_no_sub += ["-map", "0:v", "-map", "[aout]"]
@@ -375,7 +379,7 @@ def _adjust_video_duration(src_path: Path, out_path: Path, target_duration: floa
     """调整视频片段时长到目标时长"""
     # 获取原视频时长
     result = subprocess.run([
-        "ffprobe", "-v", "quiet", "-show_entries", "format=duration",
+        FFPROBE, "-v", "quiet", "-show_entries", "format=duration",
         "-of", "csv=p=0", str(src_path)
     ], capture_output=True, text=True)
     src_duration = float(result.stdout.strip())
@@ -383,14 +387,14 @@ def _adjust_video_duration(src_path: Path, out_path: Path, target_duration: floa
     if src_duration >= target_duration:
         # 截取
         subprocess.run([
-            "ffmpeg", "-i", str(src_path), "-t", str(target_duration),
+            FFMPEG, "-i", str(src_path), "-t", str(target_duration),
             "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", str(out_path), "-y", "-loglevel", "quiet"
         ], check=True)
     else:
         # 循环
         subprocess.run([
-            "ffmpeg", "-stream_loop", "-1", "-i", str(src_path), "-t", str(target_duration),
+            FFMPEG, "-stream_loop", "-1", "-i", str(src_path), "-t", str(target_duration),
             "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", str(out_path), "-y", "-loglevel", "quiet"
         ], check=True)
