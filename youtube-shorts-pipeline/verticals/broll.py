@@ -67,8 +67,26 @@ def _generate_image_runninghub(prompt: str, output_path: Path, api_key: str):
     raise RuntimeError("RunningHub timeout after 150s")
 
 
+def _get_local_frames() -> list[Path]:
+    """Get local fallback frames from local_assets/images."""
+    local_dir = Path(__file__).parent.parent / "local_assets" / "images"
+    if not local_dir.exists():
+        return []
+    frames = sorted(local_dir.glob("broll_*.png"))
+    if not frames:
+        frames = sorted(local_dir.glob("*.png"))
+    return frames
+
+
 def _fallback_frame(i: int, out_dir: Path) -> Path:
-    """Solid colour fallback frame if API fails."""
+    """Fallback frame: local assets first, then solid colour."""
+    local_frames = _get_local_frames()
+    if local_frames:
+        src = local_frames[i % len(local_frames)]
+        dst = out_dir / f"broll_{i}.png"
+        import shutil
+        shutil.copy2(src, dst)
+        return dst
     colors = [(20, 20, 60), (40, 10, 40), (10, 30, 50)]
     img = Image.new("RGB", (VIDEO_WIDTH, VIDEO_HEIGHT), colors[i % len(colors)])
     path = out_dir / f"broll_{i}.png"
