@@ -188,7 +188,8 @@ def _generate_cosyvoice(script: str, out_dir: Path, lang: str, voice: str = "lon
     if emotion not in COSYVOICE_EMOTIONS:
         emotion = "fearful"
 
-    instruction = f"你正在进行脱口秀表演，你说话的情感是{emotion}。"
+    # instruction 最大长度128字符，包含负面提示词
+    instruction = f"你正在进行脱口秀表演，情感{emotion}。禁止呼吸声、咳嗽声、叹气、杂音。"
 
     synthesizer = SpeechSynthesizer(
         model="cosyvoice-v3-plus",
