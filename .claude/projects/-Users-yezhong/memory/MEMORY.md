@@ -1,0 +1,21 @@
+- [🚫 永久禁令：禁止反复发明轮子](feedback_no_reinventing.md) — 做任何功能前先搜50+网络资源，有现成方案绝不自己写
+- [Pipeline quality & workflow standards](pipeline_quality_standards.md) — ⭐ 每日启动必读：质量标准、禁止事项、启动流程
+- [Pipeline state 2026-05-04](pipeline_state_2026-05-04.md) — 0504 修复：emotion crash、参数转发、G3 enforce、config校验
+- [User pipeline preferences](user_pipeline_prefs.md) — Non-negotiable pipeline rules, communication style
+- [Free stock video exploration](resource_exploration.md) — Task #35: find+verify 10+ free video platforms
+- [Cloud API services](cloud_api_services.md) — OCR & Whisper APIs on 8.138.165.244, docs path, SSH access
+- [Subtitle rendering rules](feedback_subtitles.md) — 禁止项：字号>8、Bold+厚Outline、长文本不拆分、单cue多行
+- [No alternatives without approval](feedback_no_alternatives.md) — 禁止未审批擅自替换方案，必须100%按用户要求执行
+- [User intent is always long-term](feedback_user_intent.md) — 核心：任何问题本质都是修系统/管线，不是做一次性内容
+- [Critical workflow rules](feedback_critical_rules.md) — 铁律：先读记忆再动手、API失效即跳过、禁止反复调试、做完即保存
+- [Container resource limits mandatory](feedback_container_limits.md) — 所有容器内存上限≤1GB，部署后立即设限
+- [Suchuang API optimization](suchuang_api_optimization.md) — 1K比2K快2倍(48s vs 90s)，提示词复杂度不影响速度
+- [Search first is absolute priority](search_first_reinforced.md) — 搜索300个经验也比盲目试错快，速创案例验证
+- [先利用再创造原则](leverage_first_principle.md) — 优先利用现有工具再自定义，Pixelle-Video案例验证效率提升10倍
+- [GitHub仓库管理规则](github_repo_management.md) — 每个项目独立仓库，已有创建权限无需询问
+- [修改前强制检查DEPENDENCIES.md](dependencies_check_required.md) — ⭐ 修改任何项目前必须先读取依赖文件
+- [Pixelle-Video v1.1 状态](pixelle_v1.1_state.md) — 横屏轮播测试完成，7/7素材，1920x1080，待接入CosyVoice+速创
+- [快车VPN代理配置](kuaiche-proxy.md) — 按需使用代理(port 7890)，不影响全局，会话用国内网络
+- [飞书-Aider 桥接配置](aider-feishu-bridge.md) — ⭐ 飞书远程控制 Aider，中文输出需改源码提示词
+- [飞书桥接状态 2026-05-08](feishu_bridge_status.md) — 飞书审批已启用，微信限流暂停
+- [StockBar项目](stockbar_project.md) — macOS状态栏股票期货行情显示器，中文配置文件
