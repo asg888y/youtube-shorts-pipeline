@@ -95,19 +95,30 @@ def _fallback_frame(i: int, out_dir: Path) -> Path:
 
 
 def generate_broll(prompts: list, out_dir: Path) -> list[Path]:
-    """Generate 3 b-roll frames via RunningHub API, with fallback."""
+    """Generate b-roll frames via RunningHub API, with fallback.
+
+    Args:
+        prompts: List of prompts (max 20 will be processed)
+        out_dir: Output directory for frames
+
+    Returns:
+        List of generated frame paths
+    """
+    # 上限20张
+    prompts = prompts[:20]
+    num_frames = len(prompts)
     frames = []
 
     api_key = _get_runninghub_key()
     if not api_key:
         log("No RUNNINGHUB_API_KEY found — using fallback frames")
-        for i in range(3):
+        for i in range(num_frames):
             frames.append(_fallback_frame(i, out_dir))
         return frames
 
-    for i, prompt in enumerate(prompts[:3]):
+    for i, prompt in enumerate(prompts):
         out_path = out_dir / f"broll_{i}.png"
-        log(f"Generating b-roll frame {i+1}/3 via RunningHub...")
+        log(f"Generating b-roll frame {i+1}/{num_frames} via RunningHub...")
 
         try:
             _generate_image_runninghub(prompt, out_path, api_key)
