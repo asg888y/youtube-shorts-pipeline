@@ -12,21 +12,28 @@ auto-hotvideo — 蹭热点视频生成工具
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 # 添加项目路径
 PROJECT_DIR = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-from verticals.config import CONFIG_FILE, DRAFTS_DIR, MEDIA_DIR
+from verticals.config import CONFIG_FILE, DRAFTS_DIR, MEDIA_DIR, load_config, save_config
 from verticals.log import log
 
 # ffmpeg-full 路径（包含libass字幕滤镜支持）
 FFMPEG = "/opt/homebrew/Cellar/ffmpeg-full/8.1.1/bin/ffmpeg"
 FFPROBE = "/opt/homebrew/Cellar/ffmpeg-full/8.1.1/bin/ffprobe"
+
+# 成本常量（仅限当前模型，禁止切换！）
+COST_PER_IMAGE = 0.05  # rhart-image-v1
+COST_PER_VIDEO = 0.20  # rhart-video-v3.1-fast
+MAX_RETRY_COUNT = 3     # 最大重试次数
 
 
 def get_hot_topics(limit: int = 10) -> list:
@@ -36,14 +43,110 @@ def get_hot_topics(limit: int = 10) -> list:
     return topics[:limit]
 
 
+def is_approval_required() -> bool:
+    """检查是否需要审批"""
+    cfg = load_config()
+    return cfg.get("APPROVAL_REQUIRED", True)
+
+
+def calculate_cost(image_count: int, video_count: int) -> dict:
+    """计算素材生成成本"""
+    image_cost = image_count * COST_PER_IMAGE
+    video_cost = video_count * COST_PER_VIDEO
+    total_cost = image_cost + video_cost
+    return {
+        "image_count": image_count,
+        "video_count": video_count,
+        "image_cost": image_cost,
+        "video_cost": video_cost,
+        "total_cost": total_cost,
+    }
+
+
+def request_approval(image_count: int, video_count: int, is_retry: bool = False, retry_info: dict = None) -> dict:
+    """
+    请求素材生成审批
+
+    Returns:
+        dict: {"approved": bool, "message": str}
+    """
+    if is_retry and retry_info:
+        # 重试申请
+        cost = calculate_cost(
+            retry_info.get("failed_images", 0),
+            retry_info.get("failed_videos", 0)
+        )
+        return {
+            "approved": False,
+            "need_approval": True,
+            "message": f"""素材生成失败，需要重试：
+- 图片：{cost['image_count']}张失败 × ${COST_PER_IMAGE} = ${cost['image_cost']:.2f}
+- 视频：{cost['video_count']}个失败 × ${COST_PER_VIDEO} = ${cost['video_cost']:.2f}
+- 重试成本：${cost['total_cost']:.2f}
+
+请回复"同意"确认重试，其他任何回复均取消："""
+        }
+    else:
+        # 首次申请
+        cost = calculate_cost(image_count, video_count)
+        return {
+            "approved": False,
+            "need_approval": True,
+            "message": f"""素材生成申请：
+- 图片：{image_count}张 × ${COST_PER_IMAGE} = ${cost['image_cost']:.2f}
+- 视频：{video_count}个 × ${COST_PER_VIDEO} = ${cost['video_cost']:.2f}
+- 预估总成本：${cost['total_cost']:.2f}
+
+请回复"同意"确认生成，其他任何回复均取消："""
+        }
+
+
+def save_task_state(job_id: str, topic: str, stage: str, stages: dict, params: dict):
+    """保存任务状态"""
+    work_dir = MEDIA_DIR / f"work_{job_id}"
+    work_dir.mkdir(exist_ok=True)
+    state_file = work_dir / "state.json"
+    state = {
+        "job_id": job_id,
+        "topic": topic,
+        "stage": stage,
+        "stages": stages,
+        "params": params,
+        "created": datetime.now().isoformat(),
+        "updated": datetime.now().isoformat(),
+    }
+    state_file.write_text(json.dumps(state, ensure_ascii=False, indent=2))
+
+
+def load_task_state(job_id: str) -> dict:
+    """加载任务状态"""
+    state_file = MEDIA_DIR / f"work_{job_id}" / "state.json"
+    if state_file.exists():
+        return json.loads(state_file.read_text())
+    return None
+
+
+def find_incomplete_tasks() -> list:
+    """查找未完成的任务"""
+    incomplete = []
+    for work_dir in MEDIA_DIR.glob("work_*"):
+        state_file = work_dir / "state.json"
+        if state_file.exists():
+            state = json.loads(state_file.read_text())
+            if state.get("stage") not in ["completed", "failed"]:
+                incomplete.append(state)
+    return incomplete
+
+
 def make_video(
     topic: str,
-    niche: str = "viral",
+    niche: str = "multi_empty_bureau",
     use_video_api: bool = False,
     switch_seconds: float = 2.0,
     image_count: int = 3,
     video_count: int = 0,
     start_with_video: bool = False,
+    skip_approval: bool = False,
 ) -> dict:
     """
     生成视频
@@ -56,9 +159,10 @@ def make_video(
         image_count: 图片数量
         video_count: 视频片段数量
         start_with_video: 开头是否使用视频
+        skip_approval: 是否跳过审批（用于已获批准的继续执行）
 
     Returns:
-        dict: 包含video_path, script, title等信息
+        dict: 包含video_path, script, title等信息，或需要审批的信息
     """
     from verticals.draft import generate_draft
     from verticals.broll import generate_broll, animate_frame
@@ -68,6 +172,24 @@ def make_video(
     from verticals.assemble import assemble_video, get_audio_duration
     from verticals.state import PipelineState
 
+    # 检查是否需要审批
+    if not skip_approval and is_approval_required():
+        approval = request_approval(image_count, video_count)
+        return {
+            "status": "need_approval",
+            "need_approval": True,
+            "message": approval["message"],
+            "params": {
+                "topic": topic,
+                "niche": niche,
+                "use_video_api": use_video_api,
+                "switch_seconds": switch_seconds,
+                "image_count": image_count,
+                "video_count": video_count,
+                "start_with_video": start_with_video,
+            }
+        }
+
     DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -75,22 +197,37 @@ def make_video(
     work_dir = MEDIA_DIR / f"work_{job_id}"
     work_dir.mkdir(exist_ok=True)
 
+    params = {
+        "switch_seconds": switch_seconds,
+        "image_count": image_count,
+        "video_count": video_count,
+        "use_video_api": use_video_api,
+        "start_with_video": start_with_video,
+    }
+
     result = {
         "job_id": job_id,
         "topic": topic,
         "niche": niche,
-        "params": {
-            "switch_seconds": switch_seconds,
-            "image_count": image_count,
-            "video_count": video_count,
-            "use_video_api": use_video_api,
-            "start_with_video": start_with_video,
-        }
+        "params": params
     }
+
+    # 初始化状态
+    stages = {
+        "draft": {"status": "pending"},
+        "voiceover": {"status": "pending"},
+        "broll": {"status": "pending"},
+        "captions": {"status": "pending"},
+        "assemble": {"status": "pending"},
+    }
+    save_task_state(job_id, topic, "draft", stages, params)
 
     # 1. 生成脚本
     log(f"生成脚本: {topic}")
-    draft = generate_draft(topic, "", niche=niche, platform="shorts", viral_mode=True)
+    stages["draft"]["status"] = "in_progress"
+    save_task_state(job_id, topic, "draft", stages, params)
+
+    draft = generate_draft(topic, "", niche=niche, platform="shorts", viral_mode=False)
     draft["job_id"] = job_id
 
     # 保存draft
@@ -99,6 +236,11 @@ def make_video(
     state.complete_stage("research")
     state.complete_stage("draft")
     state.save(draft_path)
+
+    stages["draft"]["status"] = "completed"
+    stages["draft"]["output"] = str(draft_path)
+    save_task_state(job_id, topic, "voiceover", stages, params)
+
     result["draft_path"] = str(draft_path)
     result["script"] = draft.get("script", "")
     result["title"] = draft.get("youtube_title", "")
@@ -108,6 +250,8 @@ def make_video(
     # 2. 生成素材（图片+视频混合）
     video_segments = []
     image_frames = []
+    failed_images = 0
+    failed_videos = 0
 
     # 根据start_with_video决定开头素材类型
     media_order = []
@@ -116,42 +260,92 @@ def make_video(
     else:
         media_order = ["image"] * image_count + ["video"] * video_count if video_count > 0 else ["image"] * image_count
 
+    stages["broll"]["status"] = "in_progress"
+    stages["broll"]["total"] = image_count + video_count
+    stages["broll"]["completed"] = 0
+    save_task_state(job_id, topic, "broll", stages, params)
+
     # 生成视频片段（使用RunningHub视频API）
     if video_count > 0:
         log(f"生成{video_count}个视频片段...")
         video_prompts = prompts[:video_count]
         for i, prompt in enumerate(video_prompts):
-            video_path = _generate_single_video(prompt, work_dir, job_id, i, switch_seconds)
-            video_segments.append(video_path)
+            try:
+                video_path = _generate_single_video(prompt, work_dir, job_id, i, switch_seconds)
+                video_segments.append(video_path)
+                stages["broll"]["completed"] = i + 1
+                save_task_state(job_id, topic, "broll", stages, params)
+            except Exception as e:
+                log(f"视频片段 {i+1} 生成失败: {e}")
+                failed_videos += 1
 
     # 生成图片（使用RunningHub图片API）
-    image_prompts_needed = image_count
-    if image_prompts_needed > 0:
+    if image_count > 0:
         log(f"生成{image_count}张图片...")
-        # 取对应的prompts
         img_prompts = prompts[video_count:video_count + image_count] if video_count > 0 else prompts[:image_count]
-        # 补齐
         while len(img_prompts) < image_count:
             img_prompts.append(img_prompts[-1] if img_prompts else "Cinematic scene")
-        frames = generate_broll(img_prompts[:image_count], work_dir)
-        image_frames = frames
-        state.complete_stage("broll", {"frames": [str(f) for f in frames]})
+
+        try:
+            frames = generate_broll(img_prompts[:image_count], work_dir)
+            image_frames = frames
+            # 检查是否全部成功
+            actual_count = len([f for f in frames if not f.name.startswith("fallback_")])
+            failed_images = image_count - actual_count
+            stages["broll"]["completed"] = len(video_segments) + len(frames)
+            save_task_state(job_id, topic, "broll", stages, params)
+        except Exception as e:
+            log(f"图片生成失败: {e}")
+            failed_images = image_count
+
+    # 检查是否有失败需要重试
+    if (failed_images > 0 or failed_videos > 0) and is_approval_required():
+        stages["broll"]["status"] = "failed"
+        stages["broll"]["failed_images"] = failed_images
+        stages["broll"]["failed_videos"] = failed_videos
+        save_task_state(job_id, topic, "broll", stages, params)
+
+        retry_approval = request_approval(0, 0, is_retry=True, retry_info={
+            "failed_images": failed_images,
+            "failed_videos": failed_videos,
+        })
+        return {
+            "status": "need_retry",
+            "need_approval": True,
+            "message": retry_approval["message"],
+            "job_id": job_id,
+            "failed_images": failed_images,
+            "failed_videos": failed_videos,
+        }
+
+    stages["broll"]["status"] = "completed"
+    save_task_state(job_id, topic, "voiceover", stages, params)
 
     # 3. 生成语音
     log("生成语音...")
+    stages["voiceover"]["status"] = "in_progress"
+    save_task_state(job_id, topic, "voiceover", stages, params)
+
     vo_path = generate_voiceover(draft.get("script", ""), work_dir, "zh", provider="dashscope")
-    state.complete_stage("voiceover", {"path": str(vo_path)})
+
+    stages["voiceover"]["status"] = "completed"
+    stages["voiceover"]["output"] = str(vo_path)
+    save_task_state(job_id, topic, "captions", stages, params)
+
     audio_duration = get_audio_duration(vo_path)
 
     # 4. 生成字幕
     log("生成字幕...")
+    stages["captions"]["status"] = "in_progress"
+    save_task_state(job_id, topic, "captions", stages, params)
+
     captions_result = generate_captions(vo_path, work_dir, "zh")
     ass_path = captions_result.get("ass_path")
     srt_path = captions_result.get("srt_path")
-    state.complete_stage("captions", {
-        "srt_path": str(srt_path),
-        "ass_path": str(ass_path),
-    })
+
+    stages["captions"]["status"] = "completed"
+    stages["captions"]["output"] = str(ass_path) if ass_path else None
+    save_task_state(job_id, topic, "assemble", stages, params)
 
     # 5. 准备音乐
     log("准备背景音乐...")
@@ -161,12 +355,13 @@ def make_video(
 
     # 6. 合成视频（使用switch_seconds控制切换节奏）
     log("合成视频...")
+    stages["assemble"]["status"] = "in_progress"
+    save_task_state(job_id, topic, "assemble", stages, params)
 
     # 计算总素材数和总时长
     total素材 = len(video_segments) + len(image_frames)
     total_duration_needed = total素材 * switch_seconds
 
-    # 如果音频时长不足，循环音频；如果音频时长过长，截断
     log(f"音频时长: {audio_duration}s, 目标时长: {total_duration_needed}s (素材数:{total素材}, 切换:{switch_seconds}s)")
 
     # 合成策略：混合视频片段和图片动画
@@ -184,8 +379,9 @@ def make_video(
         audio_duration=audio_duration,
     )
 
-    state.complete_stage("assemble", {"video_path": str(final_video)})
-    state.save(draft_path)
+    stages["assemble"]["status"] = "completed"
+    stages["assemble"]["output"] = str(final_video)
+    save_task_state(job_id, topic, "completed", stages, params)
 
     result["video_path"] = str(final_video)
     result["ass_path"] = str(ass_path)
@@ -212,11 +408,8 @@ def _generate_single_video(prompt: str, work_dir: Path, job_id: str, index: int,
         "Content-Type": "application/json",
     }
 
-    # 视频时长必须是4/6/8秒
-    valid_durations = [4, 6, 8]
-    video_seconds = min(valid_durations, key=lambda x: abs(x - duration))
-    if video_seconds < duration:
-        video_seconds = max(valid_durations)
+    # 视频时长固定8秒（API上限，不可超8秒）
+    video_seconds = 8
 
     full_prompt = f"请生成一段{video_seconds}秒视频：{prompt}。电影级画质，流畅运动。"
 
@@ -419,21 +612,86 @@ def cmd_make(args):
     """生成视频命令"""
     result = make_video(
         topic=args.topic,
-        niche=getattr(args, 'niche', 'viral'),
+        niche=getattr(args, 'niche', 'multi_empty_bureau'),
         use_video_api=getattr(args, 'video', False),
         switch_seconds=getattr(args, 'switch', 2.0),
         image_count=getattr(args, 'images', 3),
         video_count=getattr(args, 'videos', 0),
         start_with_video=getattr(args, 'start_video', False),
+        skip_approval=getattr(args, 'skip_approval', False),
     )
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(f"\n视频生成完成!")
-        print(f"  主题: {result['topic']}")
-        print(f"  标题: {result.get('title', '')}")
-        print(f"  视频: {result['video_path']}")
+        if result.get("status") == "need_approval":
+            print(result["message"])
+        elif result.get("status") == "need_retry":
+            print(result["message"])
+        else:
+            print(f"\n视频生成完成!")
+            print(f"  主题: {result['topic']}")
+            print(f"  标题: {result.get('title', '')}")
+            print(f"  视频: {result['video_path']}")
+
+
+def cmd_continue(args):
+    """继续未完成任务"""
+    incomplete = find_incomplete_tasks()
+
+    if not incomplete:
+        print("没有未完成的任务")
+        return
+
+    if len(incomplete) == 1:
+        task = incomplete[0]
+    else:
+        print("发现多个未完成任务：\n")
+        for i, task in enumerate(incomplete, 1):
+            print(f"  {i}. [{task['job_id']}] {task['topic']} - {task['stage']}")
+        print(f"\n请指定任务ID: python auto-hotvideo.py continue <job_id>")
+        return
+
+    print(f"继续任务: {task['job_id']}")
+    print(f"  主题: {task['topic']}")
+    print(f"  当前进度: {task['stage']}")
+
+    # 显示阶段进度
+    stages = task.get("stages", {})
+    for stage_name, stage_info in stages.items():
+        status = stage_info.get("status", "pending")
+        status_icon = "✅" if status == "completed" else "⏳" if status == "in_progress" else "⏸️"
+        print(f"  {status_icon} {stage_name}: {status}")
+
+    # TODO: 实现从中断点恢复的逻辑
+    print("\n提示：请使用相同参数重新执行 make 命令，并添加 --skip-approval 跳过审批")
+
+
+def cmd_status(args):
+    """查看任务状态"""
+    if args.job_id:
+        state = load_task_state(args.job_id)
+        if not state:
+            print(f"任务 {args.job_id} 不存在")
+            return
+        states = [state]
+    else:
+        states = find_incomplete_tasks()
+
+    if not states:
+        print("没有进行中的任务")
+        return
+
+    for state in states:
+        print(f"\n任务: {state['job_id']}")
+        print(f"  主题: {state['topic']}")
+        print(f"  当前阶段: {state['stage']}")
+        print(f"  更新时间: {state.get('updated', 'unknown')}")
+
+        stages = state.get("stages", {})
+        for stage_name, stage_info in stages.items():
+            status = stage_info.get("status", "pending")
+            print(f"    - {stage_name}: {status}")
 
 
 def cmd_run(args):
@@ -453,22 +711,27 @@ def cmd_run(args):
 
     result = make_video(
         topic=topic,
-        niche=getattr(args, 'niche', 'viral'),
+        niche=getattr(args, 'niche', 'multi_empty_bureau'),
         use_video_api=getattr(args, 'video', False),
         switch_seconds=getattr(args, 'switch', 2.0),
         image_count=getattr(args, 'images', 3),
         video_count=getattr(args, 'videos', 0),
         start_with_video=getattr(args, 'start_video', False),
+        skip_approval=getattr(args, 'skip_approval', False),
     )
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(f"\n视频生成完成!")
-        print(f"  视频: {result['video_path']}")
-
-    # 自动打开视频
-    subprocess.run(["open", result['video_path']])
+        if result.get("status") == "need_approval":
+            print(result["message"])
+        elif result.get("status") == "need_retry":
+            print(result["message"])
+        else:
+            print(f"\n视频生成完成!")
+            print(f"  视频: {result['video_path']}")
+            # 自动打开视频
+            subprocess.run(["open", result['video_path']])
 
 
 def main():
@@ -483,8 +746,11 @@ def main():
   %(prog)s make "一人公司"         # 指定主题生成视频
   %(prog)s make "一人公司" --video # 使用视频API生成动态场景
   %(prog)s make "一人公司" --switch 3 --images 5 --videos 2  # 自定义参数
+  %(prog)s make "一人公司" --skip-approval  # 跳过审批
   %(prog)s run                    # 自动获取今日热点并生成视频
   %(prog)s run --video            # 全自动+视频API
+  %(prog)s status                 # 查看任务状态
+  %(prog)s continue               # 继续未完成任务
         """
     )
 
@@ -499,23 +765,32 @@ def main():
     p_make = sub.add_parser("make", help="生成视频")
     p_make.add_argument("topic", help="视频主题")
     p_make.add_argument("--json", action="store_true", help="JSON格式输出")
-    p_make.add_argument("--niche", default="viral", help="内容风格")
+    p_make.add_argument("--niche", default="multi_empty_bureau", help="内容风格")
     p_make.add_argument("--video", action="store_true", help="使用视频API")
     p_make.add_argument("--switch", type=float, default=2.0, help="场景切换时长(秒)")
     p_make.add_argument("--images", type=int, default=3, help="图片数量")
     p_make.add_argument("--videos", type=int, default=0, help="视频片段数量")
     p_make.add_argument("--start-video", action="store_true", help="开头使用视频")
+    p_make.add_argument("--skip-approval", action="store_true", help="跳过审批")
 
     # run命令
     p_run = sub.add_parser("run", help="全自动：热点→视频")
     p_run.add_argument("--topic", help="指定主题")
     p_run.add_argument("--json", action="store_true", help="JSON格式输出")
-    p_run.add_argument("--niche", default="viral", help="内容风格")
+    p_run.add_argument("--niche", default="multi_empty_bureau", help="内容风格")
     p_run.add_argument("--video", action="store_true", help="使用视频API")
     p_run.add_argument("--switch", type=float, default=2.0, help="场景切换时长(秒)")
     p_run.add_argument("--images", type=int, default=3, help="图片数量")
     p_run.add_argument("--videos", type=int, default=0, help="视频片段数量")
     p_run.add_argument("--start-video", action="store_true", help="开头使用视频")
+    p_run.add_argument("--skip-approval", action="store_true", help="跳过审批")
+
+    # status命令
+    p_status = sub.add_parser("status", help="查看任务状态")
+    p_status.add_argument("job_id", nargs="?", help="任务ID")
+
+    # continue命令
+    p_continue = sub.add_parser("continue", help="继续未完成任务")
 
     args = parser.parse_args()
 
@@ -525,6 +800,10 @@ def main():
         cmd_make(args)
     elif args.cmd == "run":
         cmd_run(args)
+    elif args.cmd == "status":
+        cmd_status(args)
+    elif args.cmd == "continue":
+        cmd_continue(args)
 
 
 if __name__ == "__main__":

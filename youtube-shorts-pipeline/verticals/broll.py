@@ -1,6 +1,7 @@
 """B-roll generation via RunningHub API + Ken Burns animation."""
 
 import base64
+import shutil
 import time
 from pathlib import Path
 
@@ -67,25 +68,39 @@ def _generate_image_runninghub(prompt: str, output_path: Path, api_key: str):
     raise RuntimeError("RunningHub timeout after 150s")
 
 
-def _get_local_frames() -> list[Path]:
-    """Get local fallback frames from local_assets/images."""
-    local_dir = Path(__file__).parent.parent / "local_assets" / "images"
-    if not local_dir.exists():
+def _get_local_frames(theme: str = None) -> list[Path]:
+    """Get local fallback frames from local_assets/images.
+
+    Args:
+        theme: Optional theme subdirectory (e.g., "military", "tech")
+    """
+    base_dir = Path(__file__).parent.parent / "local_assets" / "images"
+
+    # 如果指定主题，先尝试主题目录
+    if theme:
+        theme_dir = base_dir / theme
+        if theme_dir.exists():
+            frames = sorted(theme_dir.glob("*.png"))
+            if frames:
+                return frames
+
+    # 回退到通用目录
+    if not base_dir.exists():
         return []
-    frames = sorted(local_dir.glob("broll_*.png"))
+    frames = sorted(base_dir.glob("broll_*.png"))
     if not frames:
-        frames = sorted(local_dir.glob("*.png"))
+        frames = sorted(base_dir.glob("*.png"))
     return frames
 
 
-def _fallback_frame(i: int, out_dir: Path) -> Path:
+def _fallback_frame(i: int, out_dir: Path, theme: str = None) -> Path:
     """Fallback frame: local assets first, then solid colour."""
-    local_frames = _get_local_frames()
+    local_frames = _get_local_frames(theme)
     if local_frames:
         src = local_frames[i % len(local_frames)]
         dst = out_dir / f"broll_{i}.png"
-        import shutil
         shutil.copy2(src, dst)
+        log(f"  使用历史素材: {src.name}")
         return dst
     colors = [(20, 20, 60), (40, 10, 40), (10, 30, 50)]
     img = Image.new("RGB", (VIDEO_WIDTH, VIDEO_HEIGHT), colors[i % len(colors)])
@@ -94,12 +109,14 @@ def _fallback_frame(i: int, out_dir: Path) -> Path:
     return path
 
 
-def generate_broll(prompts: list, out_dir: Path) -> list[Path]:
+def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme: str = None) -> list[Path]:
     """Generate b-roll frames via RunningHub API, with fallback.
 
     Args:
         prompts: List of prompts (max 20 will be processed)
         out_dir: Output directory for frames
+        use_local: If True, use local assets only (no API calls)
+        theme: Optional theme for local assets (e.g., "military", "tech")
 
     Returns:
         List of generated frame paths
@@ -109,11 +126,18 @@ def generate_broll(prompts: list, out_dir: Path) -> list[Path]:
     num_frames = len(prompts)
     frames = []
 
+    # 如果指定使用本地素材，直接返回历史素材
+    if use_local:
+        log(f"使用历史素材（主题: {theme or '通用'}）...")
+        for i in range(num_frames):
+            frames.append(_fallback_frame(i, out_dir, theme))
+        return frames
+
     api_key = _get_runninghub_key()
     if not api_key:
         log("No RUNNINGHUB_API_KEY found — using fallback frames")
         for i in range(num_frames):
-            frames.append(_fallback_frame(i, out_dir))
+            frames.append(_fallback_frame(i, out_dir, theme))
         return frames
 
     for i, prompt in enumerate(prompts):
@@ -138,9 +162,27 @@ def generate_broll(prompts: list, out_dir: Path) -> list[Path]:
 
         except Exception as e:
             log(f"Frame {i+1} failed: {e} — using fallback")
-            frames.append(_fallback_frame(i, out_dir))
+            frames.append(_fallback_frame(i, out_dir, theme))
 
     return frames
+
+
+def get_available_themes() -> list[str]:
+    """获取可用的素材主题列表"""
+    base_dir = Path(__file__).parent.parent / "local_assets" / "images"
+    if not base_dir.exists():
+        return []
+
+    themes = []
+    for d in base_dir.iterdir():
+        if d.is_dir() and not d.name.startswith("."):
+            themes.append(d.name)
+
+    # 如果根目录有图片，添加"通用"
+    if list(base_dir.glob("*.png")):
+        themes.append("通用")
+
+    return themes
 
 
 def animate_frame(img_path: Path, out_path: Path, duration: float, effect: str = "zoom_in"):
