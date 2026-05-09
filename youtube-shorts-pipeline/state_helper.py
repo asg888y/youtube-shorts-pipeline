@@ -24,12 +24,14 @@ def init_state():
             "use_video_api": False,
             "start_with_video": False,
             "use_local": False,      # 新增：是否使用历史素材
-            "theme": None           # 新增：素材主题
+            "theme": None,           # 新增：素材主题
+            "direct_script": None    # 新增：直接输入的文案
         },
         "hot_topics": [],
         "selected_index": 0,
         "job_id": None,
-        "video_path": None
+        "video_path": None,
+        "script_source": None       # 新增：文案来源（hot/direct/transcribe）
     }
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
     return state
@@ -54,6 +56,28 @@ def parse_user_input(user_input: str, state: dict) -> dict:
 
     # 清理输入
     user_input = user_input.strip()
+
+    # 检查是否是直接文案输入（以"文案："或"script:"开头）
+    if user_input.startswith('文案：') or user_input.startswith('文案:') or user_input.lower().startswith('script:'):
+        # 提取文案内容
+        if user_input.startswith('文案：') or user_input.startswith('文案:'):
+            script_content = user_input.split('：' if '：' in user_input else ':', 1)[1].strip()
+        else:
+            script_content = user_input.split(':', 1)[1].strip()
+
+        state["params"]["direct_script"] = script_content
+        state["script_source"] = "direct"
+        state["stage"] = "generate"
+        log(f"直接输入文案: {script_content[:50]}...")
+        return state
+
+    # 检查是否是视频链接（需要转录）
+    if re.match(r'https?://', user_input):
+        state["params"]["direct_script"] = user_input
+        state["script_source"] = "transcribe"
+        state["stage"] = "generate"
+        log(f"视频链接，将转录语音: {user_input}")
+        return state
 
     # 新格式：文案3/视频1,切换2秒
     # 支持：文案X/视频Y/图片Z,切换N秒
@@ -87,6 +111,7 @@ def parse_user_input(user_input: str, state: dict) -> dict:
             if 0 <= idx < len(state.get("hot_topics", [])):
                 state["selected_index"] = idx
                 state["topic"] = state["hot_topics"][idx]["title"]
+                state["script_source"] = "hot"
             continue
 
         # 解析素材类型和数量
@@ -117,12 +142,18 @@ def parse_user_input(user_input: str, state: dict) -> dict:
             # 如果不是素材格式，可能是自定义主题
             if not state["topic"]:
                 state["topic"] = part
+                state["script_source"] = "hot"
 
     # 如果没有设置切换秒数，使用默认值
     if "switch_seconds" not in state["params"] or state["params"]["switch_seconds"] <= 0:
         state["params"]["switch_seconds"] = 2.0
 
     return state
+
+
+def log(msg: str):
+    """简单日志输出"""
+    print(f"  {msg}")
 
 
 def main():
