@@ -97,6 +97,53 @@ def generate_draft(
 
     channel_note = f"\nChannel context: {channel_context}" if channel_context else ""
 
+    # bd-wenan 病毒文案框架（核心质量提升）
+    bd_wenan_framework = """
+# 角色：病毒文案策略师
+
+你是一位专攻短视频病毒传播的资深文案策略师，深谙人性弱点和情绪引爆点。
+
+## 强制规则
+
+### 1. 情绪钩子设计（开头12字内必须触发一种）
+- 恐惧型："你再不___，就会___"（触发损失厌恶）
+- 反差型："你以为___，其实___"（打破认知，制造停顿）
+- 归属型："这说的就是你"（让用户对号入座）
+- 好奇型："90%的人不知道___"（制造信息缺口）
+- 愤怒型："凭什么___"（制造不公感，激发站队）
+
+### 2. 金句创作（每个文案至少2个金句）
+金句必须同时满足：
+- 8-18字（易于记忆和口播）
+- 包含对比或矛盾（制造张力）
+- 具备独立传播能力（脱离上下文也成立）
+
+金句技巧：
+- 对比法：A以为... 其实B...
+- 极端法：把后果说到极致
+- 反问法：用问题引发思考
+- 场景法：构建具体画面
+
+### 3. 文案结构（强制5段式）
+| 段落 | 时长 | 目标 | 禁止事项 |
+|------|------|------|----------|
+| 开头 | 0-3秒 | 一句话让人停下来 | 禁止废话、自我介绍 |
+| 承接 | 3-10秒 | 让用户觉得"说的就是我" | 禁止说教 |
+| 转折 | 10-20秒 | 建立信任，输出金句 | - |
+| 干货 | 20-35秒 | 给用户能带走的东西 | 禁止超过3点 |
+| 结尾 | 35-45秒 | 让人想转发 | - |
+
+### 4. 评论区钩子（文案末尾预埋）
+- 1个反向提问（引导用户分享反面经历）
+- 1个投票型提问（让用户选A还是B）
+- 1个情绪型感叹（引导用户打出一句口头禅）
+
+### 5. 禁止事项
+- 禁止陈词滥调：大家好、众所周知、感谢观看
+- 禁止骑墙：必须有明确观点
+- 禁止空洞概念：用具体场景代替抽象概念
+"""
+
     # 病毒传播模式额外提示
     viral_extra = ""
     if viral_mode:
@@ -110,7 +157,9 @@ VIRAL CONTENT RULES (病毒传播铁律):
 - 情绪要有起伏，不能平淡
 """
 
-    prompt = f"""You are writing a {platform_label} script ({max_words} words max, ~60-90 seconds spoken).{channel_note}
+    prompt = f"""{bd_wenan_framework}
+
+You are writing a {platform_label} script ({max_words} words max, ~60-90 seconds spoken).{channel_note}
 {viral_extra}
 
 {script_context}
@@ -126,9 +175,10 @@ LIVE RESEARCH (use ONLY names/facts from here — never fabricate):
 
 RULES:
 - Anti-hallucination: only use names, scores, events found in research above
-- Follow the TONE, PACING, and HOOK PATTERNS from the niche profile above
-- Pick the most appropriate hook pattern for this specific topic
-- Use one of the CTA OPTIONS at the end
+- 开头12字内必须触发一种情绪钩子
+- 至少创作2个金句（8-18字，包含对比或矛盾）
+- 遵循5段式结构
+- 文案末尾预埋评论区钩子
 - Never use any of the NEVER USE phrases
 - B-roll prompts must follow the visual guidance (style, mood, preferred subjects)
 
@@ -141,7 +191,10 @@ Output JSON exactly:
   "youtube_tags": "tag1,tag2,tag3",
   "instagram_caption": "...",
   "tiktok_caption": "...",
-  "thumbnail_prompt": "..."
+  "thumbnail_prompt": "...",
+  "hook_type": "恐惧型/反差型/归属型/好奇型/愤怒型",
+  "golden_sentences": ["金句1", "金句2"],
+  "comment_hooks": ["钩子1", "钩子2", "钩子3"]
 }}"""
 
     raw = call_llm(prompt, provider=provider)
@@ -165,7 +218,7 @@ Output JSON exactly:
     expected_str_fields = [
         "script", "youtube_title", "youtube_description",
         "youtube_tags", "instagram_caption", "tiktok_caption",
-        "thumbnail_prompt",
+        "thumbnail_prompt", "hook_type",
     ]
     for field in expected_str_fields:
         if field in draft and not isinstance(draft[field], str):
@@ -175,6 +228,19 @@ Output JSON exactly:
             draft["broll_prompts"] = ["Cinematic landscape"] * 3
         else:
             draft["broll_prompts"] = [str(p) for p in draft["broll_prompts"][:3]]
+
+    # 验证新增字段
+    if "golden_sentences" in draft:
+        if not isinstance(draft["golden_sentences"], list):
+            draft["golden_sentences"] = []
+        else:
+            draft["golden_sentences"] = [str(s) for s in draft["golden_sentences"][:5]]
+
+    if "comment_hooks" in draft:
+        if not isinstance(draft["comment_hooks"], list):
+            draft["comment_hooks"] = []
+        else:
+            draft["comment_hooks"] = [str(h) for h in draft["comment_hooks"][:3]]
 
     # Append visual prompt suffix to b-roll prompts
     suffix = get_visual_prompt_suffix(profile)
