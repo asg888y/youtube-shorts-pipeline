@@ -50,6 +50,37 @@ def save_state(state: dict):
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
 
 
+def _parse_material_params(params_str: str, state: dict) -> dict:
+    """解析素材参数"""
+    import re
+
+    # 检查是否有切换秒数（支持小数）
+    switch_match = re.search(r'切换(\d+(?:\.\d+)?)秒', params_str)
+    if switch_match:
+        state["params"]["switch_seconds"] = float(switch_match.group(1))
+        params_str = re.sub(r',?\s*切换\d+(?:\.\d+)?秒', '', params_str)
+
+    # 解析素材部分
+    parts = params_str.split('/')
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+
+        if '图片' in part:
+            match = re.search(r'图片(\d+)', part)
+            if match:
+                state["params"]["image_count"] = int(match.group(1))
+        elif '视频' in part:
+            match = re.search(r'视频(\d+)', part)
+            if match:
+                state["params"]["video_count"] = int(match.group(1))
+                state["params"]["use_video_api"] = True
+
+    return state
+
+
 def parse_user_input(user_input: str, state: dict) -> dict:
     """解析用户输入，更新状态"""
     import re
@@ -65,18 +96,36 @@ def parse_user_input(user_input: str, state: dict) -> dict:
         else:
             script_content = user_input.split(':', 1)[1].strip()
 
+        # 检查是否包含素材参数
+        # 格式：文案：xxx /图片3/视频1,切换2秒
+        params_match = re.search(r'(.+?)\s*/(.+)', script_content)
+        if params_match:
+            script_content = params_match.group(1).strip()
+            params_str = '/' + params_match.group(2)
+            # 解析素材参数
+            state = _parse_material_params(params_str, state)
+
         state["params"]["direct_script"] = script_content
         state["script_source"] = "direct"
-        state["stage"] = "generate"
+        state["stage"] = "approval"  # 进入审批阶段，而非直接生成
         log(f"直接输入文案: {script_content[:50]}...")
         return state
 
     # 检查是否是视频链接（需要转录）
-    if re.match(r'https?://', user_input):
-        state["params"]["direct_script"] = user_input
+    url_match = re.match(r'(https?://[^\s]+)', user_input)
+    if url_match:
+        url = url_match.group(1)
+        remaining = user_input[len(url):].strip()
+
+        state["params"]["direct_script"] = url
         state["script_source"] = "transcribe"
-        state["stage"] = "generate"
-        log(f"视频链接，将转录语音: {user_input}")
+        state["stage"] = "approval"  # 进入审批阶段
+
+        # 解析剩余的素材参数
+        if remaining:
+            state = _parse_material_params(remaining, state)
+
+        log(f"视频链接，将转录语音: {url}")
         return state
 
     # 新格式：文案3/视频1,切换2秒
