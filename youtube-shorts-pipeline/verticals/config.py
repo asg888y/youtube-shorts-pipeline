@@ -67,22 +67,12 @@ def extract_keywords(text: str) -> str:
 
 
 # ─────────────────────────────────────────────────────
-# API key resolution — env → config.json
+# API key resolution — env → Keychain → config.json
 # ─────────────────────────────────────────────────────
 def _get_key(name: str) -> str:
-    """Resolve an API key: environment variable first, then config.json."""
-    val = os.environ.get(name)
-    if val:
-        return val
-    if CONFIG_FILE.exists():
-        try:
-            cfg = json.loads(CONFIG_FILE.read_text())
-            val = cfg.get(name)
-            if val:
-                return val
-        except Exception:
-            pass
-    return ""
+    """Resolve an API key: environment variable → Keychain → config.json."""
+    from .keychain_manager import get_key
+    return get_key(name)
 
 
 def get_anthropic_key() -> str:
@@ -229,19 +219,28 @@ def get_youtube_token_path() -> Path:
 
 
 def load_config() -> dict:
-    """Load the full config.json, including topic_sources."""
-    if CONFIG_FILE.exists():
-        try:
-            return json.loads(CONFIG_FILE.read_text())
-        except Exception:
-            pass
-    return {}
+    """Load config with sensitive keys from Keychain."""
+    from .keychain_manager import load_config as load_secure_config
+    return load_secure_config()
 
 
 def save_config(config: dict):
-    """Save config.json with restricted permissions."""
+    """Save config with sensitive keys to Keychain."""
+    from .keychain_manager import set_key, SENSITIVE_KEYS
+
     SKILL_DIR.mkdir(parents=True, exist_ok=True)
-    write_secret_file(CONFIG_FILE, json.dumps(config, indent=2))
+
+    # 分离敏感和非敏感配置
+    non_sensitive = {}
+    for k, v in config.items():
+        if k in SENSITIVE_KEYS:
+            # 敏感密钥存 Keychain
+            set_key(k, v)
+        else:
+            non_sensitive[k] = v
+
+    # 非敏感配置存 config.json
+    write_secret_file(CONFIG_FILE, json.dumps(non_sensitive, indent=2))
 
 
 # ─────────────────────────────────────────────────────

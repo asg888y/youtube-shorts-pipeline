@@ -281,9 +281,6 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
         for i in range(num_frames):
             frames.append(_fallback_frame(i, out_dir, theme, niche))
         return frames
-        for i in range(num_frames):
-            frames.append(_fallback_frame(i, out_dir, theme))
-        return frames
 
     for i, prompt in enumerate(prompts):
         out_path = out_dir / f"broll_{i}.png"
@@ -343,8 +340,6 @@ def get_available_niches() -> list[str]:
         niches.append("general")
 
     return sorted(niches)
-
-    return themes
 
 
 def animate_frame(img_path: Path, out_path: Path, duration: float, effect: str = "zoom_in"):
