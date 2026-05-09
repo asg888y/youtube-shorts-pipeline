@@ -30,16 +30,22 @@ from .log import log
 # ==================== Whisper API 配置 ====================
 WHISPER_APIS = [
     {
+        "name": "本地faster-whisper",
+        "url": "local",
+        "model": "tiny",
+        "priority": 1
+    },
+    {
         "name": "自建Whisper API",
         "url": "http://8.138.165.244:80/whisper/v1/audio/transcriptions",
         "model": "tiny",
-        "priority": 1
+        "priority": 2
     },
     {
         "name": "OpenAI Whisper API",
         "url": "https://api.openai.com/v1/audio/transcriptions",
         "model": "whisper-1",
-        "priority": 2,
+        "priority": 3,
         "requires_key": True
     }
 ]
@@ -54,21 +60,33 @@ VIDEO_DOWNLOADERS = [
         "platforms": ["douyin", "tiktok", "bilibili", "youtube", "kuaishou", "xiaohongshu"]
     },
     {
+        "name": "playwright",
+        "cmd": "playwright_download",
+        "priority": 2,
+        "platforms": ["douyin", "tiktok"]
+    },
+    {
+        "name": "douyin-direct",
+        "cmd": "douyin_direct",
+        "priority": 3,
+        "platforms": ["douyin"]
+    },
+    {
         "name": "gallery-dl",
         "cmd": "gallery-dl",
-        "priority": 2,
+        "priority": 4,
         "platforms": ["douyin", "tiktok", "bilibili"]
     },
     {
         "name": "TikTokApi",
         "cmd": "tiktokapi",
-        "priority": 3,
+        "priority": 5,
         "platforms": ["douyin", "tiktok"]
     },
     {
         "name": "streamlink",
         "cmd": "streamlink",
-        "priority": 4,
+        "priority": 6,
         "platforms": ["youtube", "bilibili"]
     }
 ]
@@ -207,23 +225,37 @@ def download_audio_with_tiktokapi(url: str, output_path: Path) -> Dict[str, Any]
         import asyncio
 
         async def download():
-            api = TikTokApi.create()
+            # 新版本TikTokApi用法
+            api = TikTokApi()
 
             # 提取视频ID
             video_id = extract_video_id(url)
             if not video_id:
                 return {'success': False, 'error': '无法提取视频ID'}
 
-            # 获取视频信息
-            video = api.video(id=video_id)
+            async with api:
+                # 获取视频信息
+                video = api.video(id=video_id)
 
-            # 下载视频
-            video_data = video.download_video()
+                # 获取视频数据
+                video_info = await video.info()
 
-            # 保存并转换为音频
-            video_file = output_path.with_suffix('.mp4')
-            with open(video_file, 'wb') as f:
-                f.write(video_data)
+                # 获取下载链接
+                play_url = video_info.get('video', {}).get('play_addr', '')
+                if not play_url:
+                    # 尝试其他字段
+                    play_url = video_info.get('video', {}).get('download_addr', '')
+
+                if not play_url:
+                    return {'success': False, 'error': '无法获取视频下载链接'}
+
+                # 下载视频
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(play_url, follow_redirects=True)
+                    video_file = output_path.with_suffix('.mp4')
+                    with open(video_file, 'wb') as f:
+                        f.write(response.content)
 
             # 使用ffmpeg提取音频
             subprocess.run([
@@ -238,8 +270,8 @@ def download_audio_with_tiktokapi(url: str, output_path: Path) -> Dict[str, Any]
         result = asyncio.run(download())
         return result
 
-    except ImportError:
-        return {'success': False, 'error': 'TikTokApi未安装'}
+    except ImportError as e:
+        return {'success': False, 'error': f'TikTokApi未安装或依赖缺失: {e}'}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -276,14 +308,21 @@ def download_audio_with_tool(tool_cmd: str, url: str, output_path: Path) -> Dict
                 '-o', str(output_path),
                 '--no-playlist',
                 '--no-warnings',
+                '--cookies-from-browser', 'chrome',  # 使用Chrome cookies
                 url
             ]
+        elif tool_cmd == "playwright_download":
+            return download_with_playwright(url, output_path)
+        elif tool_cmd == "douyin_direct":
+            # 直接下载抖音视频
+            return download_douyin_direct(url, output_path)
         elif tool_cmd == "gallery-dl":
-            # gallery-dl需要特殊处理
+            # gallery-dl 下载视频
+            video_file = output_path.with_suffix('.mp4')
             cmd = [
                 'python3', '-m', 'gallery_dl',
-                '--download',
-                '-o', str(output_path.parent),
+                '-o', f'base-directory={str(output_path.parent)}',
+                '-o', f'filename={output_path.stem}.mp4',
                 url
             ]
         elif tool_cmd == "streamlink":
@@ -305,6 +344,15 @@ def download_audio_with_tool(tool_cmd: str, url: str, output_path: Path) -> Dict
             timeout=120
         )
 
+        # gallery-dl 下载后需要转换
+        if tool_cmd == "gallery-dl" and output_path.with_suffix('.mp4').exists():
+            subprocess.run([
+                'ffmpeg', '-i', str(output_path.with_suffix('.mp4')),
+                '-vn', '-acodec', 'libmp3lame',
+                '-q:a', '0', str(output_path),
+                '-y', '-loglevel', 'quiet'
+            ], check=True)
+
         if result.returncode == 0 or output_path.exists():
             return {'success': True}
         else:
@@ -321,10 +369,231 @@ def download_audio_with_tool(tool_cmd: str, url: str, output_path: Path) -> Dict
         return {'success': False, 'error': str(e)}
 
 
+def download_with_playwright(url: str, output_path: Path) -> Dict[str, Any]:
+    """使用Playwright模拟浏览器下载视频"""
+
+    try:
+        from playwright.sync_api import sync_playwright
+        import time
+
+        log(f"  使用Playwright下载...")
+
+        with sync_playwright() as p:
+            # 启动浏览器
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+            )
+            page = context.new_page()
+
+            # 监听网络请求，捕获视频URL
+            video_urls = []
+
+            def handle_response(response):
+                url_str = response.url
+                content_type = response.headers.get('content-type', '')
+                # 捕获视频和音频请求
+                if 'video' in content_type or '.mp4' in url_str or 'v26-web.douyinvod.com' in url_str:
+                    video_urls.append(url_str)
+                    log(f"    捕获: {url_str[:60]}...")
+
+            page.on('response', handle_response)
+
+            # 访问页面
+            log(f"  加载页面...")
+            try:
+                page.goto(url, wait_until='domcontentloaded', timeout=30000)
+            except Exception as e:
+                log(f"  页面加载警告: {e}")
+
+            # 等待视频元素
+            time.sleep(5)
+
+            # 尝试获取视频元素
+            try:
+                video_element = page.query_selector('video')
+                if video_element:
+                    src = video_element.get_attribute('src')
+                    if src:
+                        # 补全相对URL
+                        if src.startswith('/'):
+                            src = 'https://www.iesdouyin.com' + src
+                        video_urls.append(src)
+                        log(f"    从video元素获取: {src[:60]}...")
+            except:
+                pass
+
+            # 滚动页面触发加载
+            page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+            time.sleep(2)
+
+            browser.close()
+
+        if not video_urls:
+            return {'success': False, 'error': '未捕获到视频URL'}
+
+        # 下载视频（使用最后一个URL，通常是最高质量）
+        video_url = video_urls[-1]
+        log(f"  下载视频: {video_url[:80]}...")
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15',
+            'Referer': 'https://www.douyin.com/'
+        }
+        response = requests.get(video_url, headers=headers, timeout=60)
+        if response.status_code != 200:
+            return {'success': False, 'error': f'视频下载失败: {response.status_code}'}
+
+        # 保存并提取音频
+        video_file = output_path.with_suffix('.mp4')
+        with open(video_file, 'wb') as f:
+            f.write(response.content)
+
+        subprocess.run([
+            'ffmpeg', '-i', str(video_file),
+            '-vn', '-acodec', 'libmp3lame',
+            '-q:a', '0', str(output_path),
+            '-y', '-loglevel', 'quiet'
+        ], check=True)
+
+        return {'success': True}
+
+    except ImportError:
+        return {'success': False, 'error': 'playwright未安装'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def download_douyin_direct(url: str, output_path: Path) -> Dict[str, Any]:
+    """直接下载抖音视频（使用requests）"""
+
+    try:
+        # 1. 解析短链接获取视频ID
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+        }
+
+        # 跟随重定向获取真实URL
+        log(f"  解析短链接...")
+        response = requests.get(url, headers=headers, allow_redirects=True, timeout=10)
+        real_url = response.url
+        log(f"  真实URL: {real_url}")
+
+        # 提取视频ID
+        video_id = extract_video_id(real_url)
+        if not video_id:
+            # 尝试从URL路径提取
+            match = re.search(r'/video/(\d+)', real_url)
+            if match:
+                video_id = match.group(1)
+
+        if not video_id:
+            # 尝试从短链接响应中提取
+            match = re.search(r'aweme_id=(\d+)', response.text)
+            if match:
+                video_id = match.group(1)
+
+        if not video_id:
+            return {'success': False, 'error': '无法提取视频ID'}
+
+        log(f"  视频ID: {video_id}")
+
+        # 2. 获取视频信息API
+        api_url = f"https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?item_ids={video_id}"
+        api_response = requests.get(api_url, headers=headers, timeout=10)
+
+        if api_response.status_code != 200:
+            return {'success': False, 'error': f'API请求失败: {api_response.status_code}'}
+
+        data = api_response.json()
+
+        # 3. 提取视频下载链接
+        if data.get('status_code') != 0:
+            # API可能需要登录，尝试备用方法
+            log(f"  API返回错误，尝试备用方法...")
+            return download_douyin_with_yt_dlp_video_id(video_id, output_path)
+
+        item_list = data.get('item_list', [])
+        if not item_list:
+            return {'success': False, 'error': '未找到视频信息'}
+
+        video_info = item_list[0]
+        video_url = video_info.get('video', {}).get('play_addr', {}).get('url_list', [])
+
+        if not video_url:
+            # 尝试其他字段
+            video_url = video_info.get('video', {}).get('download_addr', {}).get('url_list', [])
+
+        if not video_url:
+            return {'success': False, 'error': '未找到视频下载链接'}
+
+        # 4. 下载视频
+        video_download_url = video_url[0].replace('playwm', 'play')  # 无水印版本
+        video_response = requests.get(video_download_url, headers=headers, timeout=30)
+
+        if video_response.status_code != 200:
+            return {'success': False, 'error': f'视频下载失败: {video_response.status_code}'}
+
+        # 5. 保存视频并提取音频
+        video_file = output_path.with_suffix('.mp4')
+        with open(video_file, 'wb') as f:
+            f.write(video_response.content)
+
+        # 使用ffmpeg提取音频
+        subprocess.run([
+            'ffmpeg', '-i', str(video_file),
+            '-vn', '-acodec', 'libmp3lame',
+            '-q:a', '0', str(output_path),
+            '-y', '-loglevel', 'quiet'
+        ], check=True)
+
+        return {'success': True}
+
+    except requests.Timeout:
+        return {'success': False, 'error': '请求超时'}
+    except requests.RequestException as e:
+        return {'success': False, 'error': f'网络错误: {e}'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
+def download_douyin_with_yt_dlp_video_id(video_id: str, output_path: Path) -> Dict[str, Any]:
+    """使用视频ID通过yt-dlp下载抖音视频"""
+
+    try:
+        # 构造完整URL
+        url = f"https://www.douyin.com/video/{video_id}"
+
+        cmd = [
+            'yt-dlp',
+            '-x',
+            '--audio-format', 'mp3',
+            '--audio-quality', '0',
+            '-o', str(output_path),
+            '--no-playlist',
+            '--no-warnings',
+            url
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+        if result.returncode == 0 or output_path.exists():
+            return {'success': True}
+        else:
+            return {'success': False, 'error': result.stderr[:200] if result.stderr else 'unknown'}
+
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+
 def transcribe_with_api(audio_file: Path, api_config: Dict) -> Dict[str, Any]:
     """使用API转录音频"""
 
     try:
+        # 检查是否是本地转录
+        if api_config.get('url') == 'local':
+            return transcribe_with_local_whisper(audio_file)
+
         with open(audio_file, 'rb') as f:
             files = {'file': (audio_file.name, f, 'audio/mpeg')}
             data = {
@@ -378,12 +647,33 @@ def transcribe_with_api(audio_file: Path, api_config: Dict) -> Dict[str, Any]:
 
 
 def transcribe_with_local_whisper(audio_file: Path) -> Dict[str, Any]:
-    """使用本地faster-whisper转录"""
+    """使用本地whisper转录（优先使用openai-whisper，回退到faster-whisper）"""
 
+    # 首先尝试openai-whisper（已有本地模型）
+    try:
+        import whisper
+
+        log("  使用openai-whisper转录...")
+        model = whisper.load_model("tiny")
+
+        result = model.transcribe(str(audio_file), language="zh")
+        transcript = result.get("text", "").strip()
+
+        return {
+            'success': True,
+            'transcript': transcript,
+            'language': 'zh'
+        }
+
+    except ImportError:
+        log("  openai-whisper未安装，尝试faster-whisper...")
+    except Exception as e:
+        log(f"  openai-whisper失败: {e}，尝试faster-whisper...")
+
+    # 回退到faster-whisper
     try:
         from faster_whisper import WhisperModel
 
-        # 使用tiny模型，速度快
         model = WhisperModel("tiny", device="cpu", compute_type="int8")
 
         segments, info = model.transcribe(
@@ -402,7 +692,7 @@ def transcribe_with_local_whisper(audio_file: Path) -> Dict[str, Any]:
         }
 
     except ImportError:
-        return {'success': False, 'error': 'faster-whisper未安装'}
+        return {'success': False, 'error': 'whisper和faster-whisper都未安装'}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
