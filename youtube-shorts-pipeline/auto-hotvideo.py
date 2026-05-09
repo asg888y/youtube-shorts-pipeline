@@ -335,7 +335,7 @@ def make_video(
 
     prompts = draft.get("broll_prompts", ["Cinematic scene"] * image_count)
 
-    # 素材数量校验和自动补充
+    # 素材数量校验和警告（不自动覆盖用户指定值）
     script_text = draft.get("script", "")
     if script_text:
         # 估算音频时长（中文约3-4字/秒）
@@ -344,18 +344,19 @@ def make_video(
 
         if image_count < required_images:
             log(f"")
-            log(f"⚠️  素材数量不足警告")
+            log(f"⚠️  素材数量警告")
             log(f"   文案长度: {len(script_text)}字")
             log(f"   预估时长: {estimated_duration:.0f}秒")
             log(f"   切换间隔: {switch_seconds}秒")
-            log(f"   当前图片: {image_count}张")
-            log(f"   建议图片: {required_images}张")
-            log(f"   当前每张图片将播放: {estimated_duration/image_count:.1f}秒")
+            log(f"   用户指定: {image_count}张")
+            log(f"   建议数量: {required_images}张")
+            log(f"   每张图片将播放: {estimated_duration/image_count:.1f}秒")
             log(f"")
-
-            # 自动补充素材数量
-            log(f"✅ 自动调整素材数量: {image_count} → {required_images}张")
-            image_count = required_images
+            log(f"⚠️  素材不足可能导致视频被截断！")
+            log(f"   建议：增加图片数量或缩短文案")
+            log(f"")
+            # 不自动覆盖用户指定值，让用户决定
+            # image_count = required_images  # 已移除自动覆盖
 
             # 补充 prompts
             while len(prompts) < image_count:
