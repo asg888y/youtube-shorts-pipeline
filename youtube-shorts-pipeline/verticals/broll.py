@@ -99,45 +99,114 @@ def _get_recent_generated_frames() -> list[Path]:
     return frames[:20]  # 最多返回20张
 
 
-def _get_local_frames(theme: str = None) -> list[Path]:
+def _get_local_frames(theme: str = None, niche: str = None) -> list[Path]:
     """Get local fallback frames from local_assets/images.
 
     Args:
         theme: Optional theme subdirectory (e.g., "military", "tech")
+        niche: Optional niche/style subdirectory (e.g., "viral", "emotion", "horror")
     """
-    # 首先尝试最近生成的工作文件夹
-    recent_frames = _get_recent_generated_frames()
-    if recent_frames:
-        return recent_frames
-
-    # 然后尝试标准纯色素材库
-    color_frames = _get_standard_color_frames()
-    if color_frames:
-        return color_frames
-
-    # 最后尝试历史素材库
     base_dir = Path(__file__).parent.parent / "local_assets" / "images"
 
-    # 如果指定主题，先尝试主题目录
+    # 优先级：niche > theme > general
+    search_dirs = []
+
+    # 1. 如果指定了风格，优先从风格目录加载
+    if niche:
+        niche_dir = base_dir / niche
+        if niche_dir.exists():
+            search_dirs.append(niche_dir)
+
+    # 2. 如果指定了主题，从主题目录加载
     if theme:
         theme_dir = base_dir / theme
         if theme_dir.exists():
-            frames = sorted(theme_dir.glob("*.png"))
+            search_dirs.append(theme_dir)
+
+    # 3. 回退到general目录
+    general_dir = base_dir / "general"
+    if general_dir.exists():
+        search_dirs.append(general_dir)
+
+    # 4. 最后尝试根目录（兼容旧结构）
+    search_dirs.append(base_dir)
+
+    # 按优先级搜索
+    for search_dir in search_dirs:
+        if search_dir.exists():
+            frames = sorted(search_dir.glob("*.png"))
             if frames:
+                log(f"  从素材库加载: {search_dir.name} ({len(frames)}张)")
                 return frames
 
-    # 回退到通用目录
+    return []
+
+
+def _get_style_color_frames(niche: str = None) -> list[Path]:
+    """Get style-appropriate color frames from standard_assets."""
+    base_dir = Path(__file__).parent.parent / "standard_assets" / "images" / "colors"
     if not base_dir.exists():
         return []
-    frames = sorted(base_dir.glob("broll_*.png"))
+
+    # 根据风格选择合适的颜色
+    style_colors = {
+        "viral": ["color_red.png", "color_orange.png"],      # 高对比、冲击力
+        "emotion": ["color_blue.png", "color_purple.png"],   # 温暖、治愈
+        "knowledge": ["color_blue.png", "color_gray.png"],   # 专业、清晰
+        "horror": ["color_purple.png", "color_gray.png"],    # 暗色调、神秘
+        "tech": ["color_blue.png", "color_gray.png"],        # 科技感
+        "general": ["color_blue.png", "color_green.png"],    # 通用
+    }
+
+    preferred = style_colors.get(niche, style_colors["general"])
+    frames = []
+    for color in preferred:
+        path = base_dir / color
+        if path.exists():
+            frames.append(path)
+
+    # 如果没有找到偏好颜色，返回所有颜色
     if not frames:
-        frames = sorted(base_dir.glob("*.png"))
+        frames = sorted(base_dir.glob("color_*.png"))
+
     return frames
 
 
-def _fallback_frame(i: int, out_dir: Path, theme: str = None) -> Path:
-    """Fallback frame: recent generated first, then standard colors, then local assets, then solid colour."""
-    # 首先尝试最近生成的工作文件夹
+def _get_recent_generated_frames(niche: str = None) -> list[Path]:
+    """从最近生成的工作文件夹中提取素材（可选按风格筛选）"""
+    import glob
+    media_dir = Path.home() / ".verticals" / "media"
+    if not media_dir.exists():
+        return []
+
+    # 查找最近的工作文件夹
+    work_dirs = sorted(media_dir.glob("work_*"), key=lambda x: x.stat().st_mtime, reverse=True)
+
+    frames = []
+    for work_dir in work_dirs[:5]:  # 检查最近5个工作文件夹
+        if work_dir.is_dir():
+            # 查找broll图片
+            broll_files = sorted(work_dir.glob("broll_*.png"))
+            if broll_files:
+                frames.extend(broll_files)
+                log(f"  从历史工作文件夹提取素材: {work_dir.name} ({len(broll_files)}张)")
+
+    return frames[:20]  # 最多返回20张
+
+
+def _fallback_frame(i: int, out_dir: Path, theme: str = None, niche: str = None) -> Path:
+    """Fallback frame: niche-specific > recent generated > style colors > local assets > solid colour."""
+    # 1. 首先尝试风格对应的本地素材
+    if niche:
+        local_frames = _get_local_frames(theme=theme, niche=niche)
+        if local_frames:
+            src = local_frames[i % len(local_frames)]
+            dst = out_dir / f"broll_{i}.png"
+            shutil.copy2(src, dst)
+            log(f"  使用风格素材: {niche}/{src.name}")
+            return dst
+
+    # 2. 尝试最近生成的工作文件夹
     recent_frames = _get_recent_generated_frames()
     if recent_frames:
         src = recent_frames[i % len(recent_frames)]
@@ -146,17 +215,17 @@ def _fallback_frame(i: int, out_dir: Path, theme: str = None) -> Path:
         log(f"  使用历史生成素材: {src.parent.name}/{src.name}")
         return dst
 
-    # 然后尝试标准纯色素材库
-    color_frames = _get_standard_color_frames()
+    # 3. 尝试风格对应的颜色素材
+    color_frames = _get_style_color_frames(niche)
     if color_frames:
         src = color_frames[i % len(color_frames)]
         dst = out_dir / f"broll_{i}.png"
         shutil.copy2(src, dst)
-        log(f"  使用标准纯色素材: {src.name}")
+        log(f"  使用风格颜色素材: {src.name}")
         return dst
 
-    # 然后尝试历史素材
-    local_frames = _get_local_frames(theme)
+    # 4. 尝试通用历史素材
+    local_frames = _get_local_frames(theme=theme, niche=None)
     if local_frames:
         src = local_frames[i % len(local_frames)]
         dst = out_dir / f"broll_{i}.png"
@@ -164,16 +233,24 @@ def _fallback_frame(i: int, out_dir: Path, theme: str = None) -> Path:
         log(f"  使用历史素材: {src.name}")
         return dst
 
-    # 最后回退到纯色背景
-    colors = [(20, 20, 60), (40, 10, 40), (10, 30, 50)]
+    # 5. 最后回退到纯色背景（根据风格选择颜色）
+    style_bg_colors = {
+        "viral": [(180, 30, 30), (200, 80, 20), (150, 20, 20)],      # 红色系
+        "emotion": [(40, 60, 120), (80, 40, 100), (60, 80, 140)],    # 蓝紫色系
+        "knowledge": [(30, 50, 100), (50, 60, 90), (40, 70, 110)],   # 蓝灰色系
+        "horror": [(30, 20, 50), (50, 20, 40), (20, 30, 40)],        # 暗色系
+        "tech": [(20, 40, 80), (30, 50, 90), (40, 60, 100)],         # 科技蓝
+        "general": [(20, 20, 60), (40, 10, 40), (10, 30, 50)],      # 默认
+    }
+    colors = style_bg_colors.get(niche, style_bg_colors["general"])
     img = Image.new("RGB", (VIDEO_WIDTH, VIDEO_HEIGHT), colors[i % len(colors)])
     path = out_dir / f"broll_{i}.png"
     img.save(path)
-    log(f"  生成纯色背景")
+    log(f"  生成风格背景: {niche or 'general'}")
     return path
 
 
-def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme: str = None) -> list[Path]:
+def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme: str = None, niche: str = None) -> list[Path]:
     """Generate b-roll frames via RunningHub API, with fallback.
 
     Args:
@@ -181,6 +258,7 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
         out_dir: Output directory for frames
         use_local: If True, use local assets only (no API calls)
         theme: Optional theme for local assets (e.g., "military", "tech")
+        niche: Optional niche/style for style-specific assets (e.g., "viral", "emotion")
 
     Returns:
         List of generated frame paths
@@ -192,14 +270,17 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
 
     # 如果指定使用本地素材，直接返回历史素材
     if use_local:
-        log(f"使用历史素材（主题: {theme or '通用'}）...")
+        log(f"使用历史素材（风格: {niche or '通用'}, 主题: {theme or '通用'}）...")
         for i in range(num_frames):
-            frames.append(_fallback_frame(i, out_dir, theme))
+            frames.append(_fallback_frame(i, out_dir, theme, niche))
         return frames
 
     api_key = _get_runninghub_key()
     if not api_key:
         log("No RUNNINGHUB_API_KEY found — using fallback frames")
+        for i in range(num_frames):
+            frames.append(_fallback_frame(i, out_dir, theme, niche))
+        return frames
         for i in range(num_frames):
             frames.append(_fallback_frame(i, out_dir, theme))
         return frames
@@ -226,7 +307,7 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
 
         except Exception as e:
             log(f"Frame {i+1} failed: {e} — using fallback")
-            frames.append(_fallback_frame(i, out_dir, theme))
+            frames.append(_fallback_frame(i, out_dir, theme, niche))
 
     return frames
 
@@ -242,9 +323,26 @@ def get_available_themes() -> list[str]:
         if d.is_dir() and not d.name.startswith("."):
             themes.append(d.name)
 
-    # 如果根目录有图片，添加"通用"
-    if list(base_dir.glob("*.png")):
-        themes.append("通用")
+    return sorted(themes)
+
+
+def get_available_niches() -> list[str]:
+    """获取可用的风格素材列表"""
+    base_dir = Path(__file__).parent.parent / "local_assets" / "images"
+    if not base_dir.exists():
+        return ["general"]
+
+    niches = []
+    for d in base_dir.iterdir():
+        if d.is_dir() and not d.name.startswith("."):
+            # 检查是否有素材
+            if list(d.glob("*.png")):
+                niches.append(d.name)
+
+    if "general" not in niches:
+        niches.append("general")
+
+    return sorted(niches)
 
     return themes
 

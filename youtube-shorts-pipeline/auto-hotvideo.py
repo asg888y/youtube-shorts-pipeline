@@ -404,7 +404,7 @@ def make_video(
             img_prompts.append(img_prompts[-1] if img_prompts else "Cinematic scene")
 
         try:
-            frames = generate_broll(img_prompts[:image_count], work_dir)
+            frames = generate_broll(img_prompts[:image_count], work_dir, niche=niche)
             image_frames = frames
             # 检查是否全部成功
             actual_count = len([f for f in frames if not f.name.startswith("fallback_")])
