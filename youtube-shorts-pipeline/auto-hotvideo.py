@@ -567,6 +567,12 @@ def _assemble_mixed(
     video_idx = 0
     image_idx = 0
 
+    # 计算每个素材的实际播放时长（基于音频总时长）
+    total_segments = len(media_order)
+    per_segment_duration = audio_duration / total_segments if total_segments > 0 else switch_seconds
+
+    log(f"素材分配: {total_segments}个素材, 每个播放{per_segment_duration:.1f}秒 (音频总长{audio_duration:.1f}秒)")
+
     for i, kind in enumerate(media_order):
         seg_path = work_dir / f"seg_{i}.mp4"
 
@@ -574,10 +580,10 @@ def _assemble_mixed(
             # 视频片段：调整时长
             src_video = video_segments[video_idx]
             video_idx += 1
-            # 截取或循环到switch_seconds时长
-            _adjust_video_duration(src_video, seg_path, switch_seconds)
+            # 截取或循环到per_segment_duration时长
+            _adjust_video_duration(src_video, seg_path, per_segment_duration)
         else:
-            # 图片：生成Ken Burns动画
+            # 图片：生成Ken Burns动画（使用计算的实际时长）
             if image_idx < len(image_frames):
                 src_image = image_frames[image_idx]
                 image_idx += 1
@@ -588,7 +594,7 @@ def _assemble_mixed(
                 src_image = work_dir / f"fallback_{i}.png"
                 img = Image.new("RGB", (VIDEO_WIDTH, VIDEO_HEIGHT), colors[i % len(colors)])
                 img.save(src_image)
-            animate_frame(src_image, seg_path, switch_seconds, effects[i % len(effects)])
+            animate_frame(src_image, seg_path, per_segment_duration, effects[i % len(effects)])
 
         animated_segments.append(seg_path)
 
