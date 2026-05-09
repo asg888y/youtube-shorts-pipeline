@@ -218,47 +218,10 @@ def _generate_cosyvoice(script: str, out_dir: Path, lang: str, voice: str = "lon
 def get_tts_provider(name: str | None = None) -> str:
     """Resolve which TTS provider to use.
 
-    Priority: explicit name > TTS_PROVIDER env > auto-detect.
-    Auto-detect tries: dashscope > say (macOS) > edge_tts > elevenlabs.
+    强制使用 DashScope (百炼) CosyVoice 作为唯一 TTS 提供商。
     """
-    if name and name != "auto":
-        return name.lower()
-
-    from_env = os.environ.get("TTS_PROVIDER", "").lower()
-    if from_env:
-        return from_env
-
-    from .config import load_config
-    from_cfg = load_config().get("TTS_PROVIDER", "").lower()
-    if from_cfg:
-        return from_cfg
-
-    # Auto-detect: prefer macOS say for reliability
-    import shutil
-    if shutil.which("say"):
-        return "say"
-
-    # Try DashScope (百炼)
-    if _get_dashscope_key():
-        return "dashscope"
-
-    # Edge TTS (free, cross-platform)
-    try:
-        import edge_tts  # noqa: F401
-        return "edge"
-    except ImportError:
-        pass
-
-    if get_elevenlabs_key():
-        return "elevenlabs"
-
-    raise RuntimeError(
-        "No TTS provider available. Install one:\n"
-        "  Use macOS (has built-in 'say')\n"
-        "  Set DASHSCOPE_API_KEY (百炼)\n"
-        "  pip install edge-tts  (free)\n"
-        "  Set ELEVENLABS_API_KEY (premium)"
-    )
+    # 强制返回 dashscope，忽略其他参数
+    return "dashscope"
 
 
 def generate_voiceover(
@@ -268,69 +231,21 @@ def generate_voiceover(
     provider: str | None = None,
     voice_config: dict | None = None,
 ) -> Path:
-    """Generate voiceover via the configured TTS provider.
+    """Generate voiceover via DashScope CosyVoice (唯一 TTS 提供商).
 
     Args:
         script: The voiceover text.
         out_dir: Directory to save the audio file.
-        lang: Language code (en, hi, es, etc.).
-        provider: TTS provider name (edge, elevenlabs, say).
-        voice_config: Optional voice config from niche profile.
+        lang: Language code (en, zh, hi, etc.).
+        provider: 忽略，强制使用 dashscope。
+        voice_config: Optional voice config (voice_id, emotion).
 
     Returns:
         Path to the generated audio file.
     """
-    provider = get_tts_provider(provider)
     voice_config = voice_config or {}
 
-    if provider == "dashscope":
-        try:
-            # Get voice and emotion from config
-            voice = voice_config.get("voice_id", "longanyang")
-            emotion = voice_config.get("emotion", "fearful")
-            return _generate_cosyvoice(script, out_dir, lang, voice=voice, emotion=emotion)
-        except Exception as e:
-            log(f"CosyVoice TTS failed: {e}")
-            # Fall through to next provider
-            try:
-                import edge_tts  # noqa: F401
-                log("Falling back to Edge TTS...")
-                provider = "edge"
-            except ImportError:
-                if get_elevenlabs_key():
-                    log("Falling back to ElevenLabs...")
-                    provider = "elevenlabs"
-                else:
-                    log("Falling back to macOS say...")
-                    return _generate_say(script, out_dir, lang)
-
-    if provider == "edge":
-        voice_override = voice_config.get("voice_id", "")
-        try:
-            return _generate_edge_tts(script, out_dir, lang, voice_override)
-        except Exception as e:
-            log(f"Edge TTS failed: {e}")
-            # Fall through to next provider
-            if get_elevenlabs_key():
-                log("Falling back to ElevenLabs...")
-                provider = "elevenlabs"
-            else:
-                log("Falling back to macOS say...")
-                return _generate_say(script, out_dir)
-
-    if provider == "elevenlabs":
-        try:
-            return _generate_elevenlabs(
-                script, out_dir, lang,
-                voice_id=voice_config.get("voice_id", ""),
-                settings=voice_config.get("settings"),
-            )
-        except Exception as e:
-            log(f"ElevenLabs failed: {e}")
-            log("Falling back to macOS say...")
-            return _generate_say(script, out_dir)
-
-    if provider == "say":
-        return _generate_say(script, out_dir)
-
-    raise ValueError(f"Unknown TTS provider: {provider}")
+    # 强制使用 DashScope CosyVoice
+    voice = voice_config.get("voice_id", "longanyang")
+    emotion = voice_config.get("emotion", "fearful")
+    return _generate_cosyvoice(script, out_dir, lang, voice=voice, emotion=emotion)
