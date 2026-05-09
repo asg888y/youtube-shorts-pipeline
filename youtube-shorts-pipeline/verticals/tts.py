@@ -182,23 +182,13 @@ def _generate_cosyvoice(script: str, out_dir: Path, lang: str, voice: str = "lon
     voice_id = COSYVOICE_VOICES.get(voice, "longanyang")
     out_path = out_dir / f"voiceover_{lang}.mp3"
 
-    log(f"Generating {lang} voiceover via CosyVoice-v3-plus (voice: {voice_id}, emotion: {emotion}, speed: 1.3)...")
-
-    # Validate emotion
-    if emotion not in COSYVOICE_EMOTIONS:
-        emotion = "fearful"
-
-    # instruction 最大长度128字符，包含负面提示词
-    instruction = f"你正在进行脱口秀表演，情感{emotion}。禁止呼吸声、咳嗽声、叹气、杂音。"
+    log(f"Generating {lang} voiceover via CosyVoice-v3-plus (voice: {voice_id}, speed: 1.3)...")
 
     synthesizer = SpeechSynthesizer(
         model="cosyvoice-v3-plus",
         voice=voice_id,
         format=AudioFormat.MP3_22050HZ_MONO_256KBPS,
-        instruction=instruction,
         speech_rate=1.3,  # 1.3x speed
-        pitch_rate=0.85,  # Slightly lower pitch
-        volume=90,
     )
 
     audio_data = synthesizer.call(script)
