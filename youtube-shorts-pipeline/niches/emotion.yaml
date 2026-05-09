@@ -1,0 +1,93 @@
+name: emotion
+display_name: "情感励志"
+
+script:
+  tone: "温暖、治愈、引发共鸣、情感深度"
+  pacing: "舒缓、有节奏感、留白有度"
+  word_count: "150 to 200"
+  sentence_style: "中长句为主，有情感起伏"
+
+  hooks:
+    - id: story_opening
+      template: "昨天我看到一个故事，让我久久不能平静..."
+      when: "有故事/案例时"
+    - id: question_heart
+      template: "你有没有过这样的时刻？{topic}"
+      when: "有共鸣话题时"
+    - id: contrast_life
+      template: "有人问我，{topic}。我想了很久..."
+      when: "有人生感悟时"
+    - id: memory_trigger
+      template: "看到{scene}，我突然想起了..."
+      when: "有回忆/怀旧内容时"
+
+  cta_variants:
+    - "转发给那个懂你的人。"
+    - "评论区留下你的故事。"
+    - "关注我，陪你走过每一天。"
+    - "点赞，让更多人看到。"
+    - "你并不孤单。"
+
+  forbidden_phrases:
+    - "大家好"
+    - "今天我们来聊聊"
+    - "众所周知"
+    - "喜欢的朋友点个赞"
+    - "感谢观看"
+
+  structure:
+    opening: "情感引入，制造共鸣点"
+    middle: "故事展开，情绪递进"
+    closing: "升华主题，温暖收尾"
+
+visuals:
+  style: "温暖、柔和、电影感"
+  mood: "治愈、温馨、有故事感"
+  subjects:
+    prefer:
+      - "人物特写"
+      - "自然光影"
+      - "城市黄昏"
+      - "温暖色调场景"
+      - "生活细节"
+    avoid:
+      - "冷色调"
+      - "商业感画面"
+      - "过于激烈的场景"
+  prompt_suffix: "温暖色调，柔和光影，电影级质感，治愈系风格"
+
+voice:
+  pace: "中速，约150 wpm"
+  energy: "温暖、有感染力"
+  style: "情感化、有起伏"
+  suggested_voices:
+    dashscope: "longanhuan"
+    edge_tts: "zh-CN-XiaoxiaoNeural"
+
+captions:
+  highlight_color: "#FFD700"
+  text_color: "#FFFFFF"
+  font_size: 72
+  font_weight: "bold"
+  position: "lower_third"
+  words_per_group: 4
+
+music:
+  mood: "温暖、治愈、钢琴为主"
+  energy: "low to medium"
+  duck_volume_speech: 0.15
+  duck_volume_gap: 0.30
+
+thumbnail:
+  style: "温暖色调、情感化标题"
+  text_position: "center"
+  guidelines:
+    - "标题要有温度"
+    - "画面要有故事感"
+    - "颜色偏暖"
+
+discovery:
+  hot_sources:
+    - "微博情感话题"
+    - "知乎情感问题"
+    - "小红书情感笔记"

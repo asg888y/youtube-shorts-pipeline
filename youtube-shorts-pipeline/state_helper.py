@@ -25,7 +25,8 @@ def init_state():
             "start_with_video": False,
             "use_local": False,      # 新增：是否使用历史素材
             "theme": None,           # 新增：素材主题
-            "direct_script": None    # 新增：直接输入的文案
+            "direct_script": None,   # 新增：直接输入的文案
+            "niche": "general"       # 新增：视觉风格
         },
         "hot_topics": [],
         "selected_index": 0,
@@ -187,6 +188,16 @@ def parse_user_input(user_input: str, state: dict) -> dict:
             theme_match = re.search(r'历史素材\s*[:：]?\s*(\w+)', part)
             if theme_match:
                 state["params"]["theme"] = theme_match.group(1)
+        elif '风格' in part or 'style' in part.lower():
+            # 解析风格参数：风格:viral 或 style:viral
+            match = re.search(r'(?:风格|style)[:：]?\s*(\w+)', part, re.IGNORECASE)
+            if match:
+                niche = match.group(1).lower()
+                # 验证风格是否存在
+                valid_niches = ['general', 'viral', 'emotion', 'knowledge', 'horror', 'tech']
+                if niche in valid_niches:
+                    state["params"]["niche"] = niche
+                    log(f"设置视觉风格: {niche}")
         else:
             # 如果不是素材格式，可能是自定义主题
             if not state["topic"]:

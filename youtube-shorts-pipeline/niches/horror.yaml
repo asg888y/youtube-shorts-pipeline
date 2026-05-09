@@ -1,0 +1,93 @@
+name: horror
+display_name: "悬疑惊悚"
+
+script:
+  tone: "神秘、紧张、悬念感强"
+  pacing: "慢节奏、留白、突然转折"
+  word_count: "100 to 140"
+  sentence_style: "短句为主，有停顿，制造紧张感"
+
+  hooks:
+    - id: warning
+      template: "警告：接下来的内容可能会让你..."
+      when: "有惊悚内容时"
+    - id: mystery
+      template: "这件事发生在我身边，至今无法解释..."
+      when: "有神秘事件时"
+    - id: midnight
+      template: "凌晨三点，我收到了一条消息..."
+      when: "有恐怖故事时"
+    - id: unexplained
+      template: "科学家至今无法解释这个现象..."
+      when: "有未解之谜时"
+
+  cta_variants:
+    - "你敢转发给朋友吗？"
+    - "评论区告诉我你的看法。"
+    - "关注我，每天一个细思极恐的故事。"
+    - "点赞收藏，晚上看。"
+    - "你遇到过类似的事吗？"
+
+  forbidden_phrases:
+    - "大家好"
+    - "今天我们来聊聊"
+    - "众所周知"
+    - "喜欢的朋友点个赞"
+    - "感谢观看"
+
+  structure:
+    opening: "制造悬念，设置钩子"
+    middle: "层层递进，气氛渲染"
+    closing: "反转或留白，细思极恐"
+
+visuals:
+  style: "暗色调、高对比、神秘感"
+  mood: "紧张、压抑、悬疑"
+  subjects:
+    prefer:
+      - "暗色调场景"
+      - "阴影"
+      - "模糊人影"
+      - "空旷空间"
+      - "局部特写"
+    avoid:
+      - "明亮场景"
+      - "温馨画面"
+      - "清晰人脸"
+  prompt_suffix: "暗色调，高对比度，神秘氛围，电影级画质"
+
+voice:
+  pace: "慢，约120 wpm"
+  energy: "低沉、有压迫感"
+  style: "神秘、有起伏"
+  suggested_voices:
+    dashscope: "longanyang"
+    edge_tts: "zh-CN-YunxiNeural"
+
+captions:
+  highlight_color: "#8B0000"
+  text_color: "#FFFFFF"
+  font_size: 72
+  font_weight: "bold"
+  position: "center"
+  words_per_group: 3
+
+music:
+  mood: "紧张、悬疑、低频为主"
+  energy: "low to medium"
+  duck_volume_speech: 0.08
+  duck_volume_gap: 0.15
+
+thumbnail:
+  style: "暗色调、神秘感、有悬念"
+  text_position: "center"
+  guidelines:
+    - "标题要有悬念"
+    - "画面要神秘"
+    - "颜色偏暗"
+
+discovery:
+  hot_sources:
+    - "知乎灵异话题"
+    - "B站鬼畜区"
+    - "微博悬疑话题"

@@ -127,32 +127,57 @@ def load_task_state(job_id: str) -> dict:
 
 
 def generate_broll_prompts_from_script(script: str, count: int, niche: str = "general") -> list:
-    """从文案生成B-roll提示词"""
+    """从文案生成B-roll提示词，根据风格配置调整视觉风格"""
     from verticals.llm import call_llm
+    from verticals.niche import load_niche, get_visual_context, get_visual_prompt_suffix
+
+    # 加载风格配置
+    profile = load_niche(niche)
+    visual_ctx = get_visual_context(profile)
+    prompt_suffix = get_visual_prompt_suffix(profile)
+
+    # 获取视觉风格信息
+    style = visual_ctx.get("style", "cinematic, professional")
+    mood = visual_ctx.get("mood", "neutral, engaging")
+    subjects = visual_ctx.get("subjects", {})
+    prefer = subjects.get("prefer", [])
+    avoid = subjects.get("avoid", [])
+
+    # 构建风格指导
+    style_guide = f"""
+视觉风格: {style}
+氛围基调: {mood}
+"""
+    if prefer:
+        style_guide += f"优先画面: {', '.join(prefer)}\n"
+    if avoid:
+        style_guide += f"避免画面: {', '.join(avoid)}\n"
 
     prompt = f"""根据以下文案内容，生成{count}个视觉画面描述，用于AI生成图片。
 
 文案：
 {script}
 
+{style_guide}
 要求：
 1. 每个画面描述要具体、视觉化
 2. 画面要与文案内容相关
-3. 风格统一，适合短视频
+3. 风格统一：{style}
 4. 每个描述一行，不要编号
+5. 每个描述末尾添加风格后缀：{prompt_suffix}
 
 直接输出{count}行画面描述："""
 
     try:
-        result = call_llm(prompt, max_tokens=500)
+        result = call_llm(prompt, max_tokens=800)
         prompts = [p.strip() for p in result.strip().split('\n') if p.strip()]
         # 确保数量正确
         while len(prompts) < count:
-            prompts.append("Cinematic scene, dramatic lighting")
+            prompts.append(f"Cinematic scene, dramatic lighting, {prompt_suffix}")
         return prompts[:count]
     except Exception as e:
         log(f"生成B-roll提示词失败: {e}")
-        return ["Cinematic scene, dramatic lighting"] * count
+        return [f"Cinematic scene, dramatic lighting, {prompt_suffix}"] * count
 
 
 def find_incomplete_tasks() -> list:
@@ -169,7 +194,7 @@ def find_incomplete_tasks() -> list:
 
 def make_video(
     topic: str,
-    niche: str = "multi_empty_bureau",
+    niche: str = "general",
     use_video_api: bool = False,
     switch_seconds: float = 2.0,
     image_count: int = 3,
@@ -878,7 +903,7 @@ def main():
     p_make = sub.add_parser("make", help="生成视频")
     p_make.add_argument("topic", help="视频主题")
     p_make.add_argument("--json", action="store_true", help="JSON格式输出")
-    p_make.add_argument("--niche", default="multi_empty_bureau", help="内容风格")
+    p_make.add_argument("--niche", default="general", help="内容风格 (general/viral/emotion/knowledge/horror/tech)")
     p_make.add_argument("--video", action="store_true", help="使用视频API")
     p_make.add_argument("--switch", type=float, default=2.0, help="场景切换时长(秒)")
     p_make.add_argument("--images", type=int, default=3, help="图片数量")
@@ -890,7 +915,7 @@ def main():
     p_run = sub.add_parser("run", help="全自动：热点→视频")
     p_run.add_argument("--topic", help="指定主题")
     p_run.add_argument("--json", action="store_true", help="JSON格式输出")
-    p_run.add_argument("--niche", default="multi_empty_bureau", help="内容风格")
+    p_run.add_argument("--niche", default="general", help="内容风格 (general/viral/emotion/knowledge/horror/tech)")
     p_run.add_argument("--video", action="store_true", help="使用视频API")
     p_run.add_argument("--switch", type=float, default=2.0, help="场景切换时长(秒)")
     p_run.add_argument("--images", type=int, default=3, help="图片数量")

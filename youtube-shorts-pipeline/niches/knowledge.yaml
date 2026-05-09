@@ -1,0 +1,93 @@
+name: knowledge
+display_name: "知识科普"
+
+script:
+  tone: "专业、清晰、有趣、易懂"
+  pacing: "适中、逻辑清晰、重点突出"
+  word_count: "180 to 220"
+  sentence_style: "短句为主，避免复杂从句"
+
+  hooks:
+    - id: curiosity
+      template: "你知道吗？{topic}背后的真相是..."
+      when: "有反常识内容时"
+    - id: question_hook
+      template: "为什么{topic}？答案可能出乎你的意料..."
+      when: "有疑问/解释性内容时"
+    - id: data_shock
+      template: "这个数据让我震惊：{data}..."
+      when: "有具体数据时"
+    - id: myth_buster
+      template: "关于{topic}，90%的人都理解错了..."
+      when: "有误区/纠正内容时"
+
+  cta_variants:
+    - "关注我，每天一个新知识。"
+    - "收藏起来，下次复习。"
+    - "转发给需要的朋友。"
+    - "评论区告诉我你还想知道什么。"
+    - "点赞让更多人看到。"
+
+  forbidden_phrases:
+    - "大家好"
+    - "今天我们来聊聊"
+    - "众所周知"
+    - "喜欢的朋友点个赞"
+    - "感谢观看"
+
+  structure:
+    opening: "提出问题或悬念，引发好奇"
+    middle: "层层递进，逻辑清晰"
+    closing: "总结要点，引导互动"
+
+visuals:
+  style: "清晰、专业、信息可视化"
+  mood: "专业、有趣、易懂"
+  subjects:
+    prefer:
+      - "信息图表"
+      - "示意图"
+      - "实物特写"
+      - "流程图解"
+      - "对比画面"
+    avoid:
+      - "模糊画面"
+      - "无关装饰"
+      - "过于抽象"
+  prompt_suffix: "专业清晰，信息可视化风格，高质量"
+
+voice:
+  pace: "中速，约160 wpm"
+  energy: "专业、有活力"
+  style: "清晰、有节奏"
+  suggested_voices:
+    dashscope: "longanyang"
+    edge_tts: "zh-CN-YunxiNeural"
+
+captions:
+  highlight_color: "#00BFFF"
+  text_color: "#FFFFFF"
+  font_size: 68
+  font_weight: "bold"
+  position: "lower_third"
+  words_per_group: 5
+
+music:
+  mood: "轻快、科技感、无歌词"
+  energy: "medium"
+  duck_volume_speech: 0.10
+  duck_volume_gap: 0.25
+
+thumbnail:
+  style: "清晰标题、专业感、有信息量"
+  text_position: "center"
+  guidelines:
+    - "标题要有吸引力"
+    - "画面要专业"
+    - "颜色对比清晰"
+
+discovery:
+  hot_sources:
+    - "知乎科普话题"
+    - "B站知识区"
+    - "果壳网"

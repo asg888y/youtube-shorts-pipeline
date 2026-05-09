@@ -1,0 +1,132 @@
+name: multi_empty_bureau
+display_name: "多空情报局"
+account_type: "地缘政治+金融逻辑"
+
+script:
+  # 多空情报局脚本框架
+  framework:
+    sections:
+      - name: "开头"
+        duration: "0-3秒"
+        requirement: "情绪冲击/反常识/视觉钩子，1句话，大众能看"
+      - name: "新闻事实"
+        duration: "3-12秒"
+        requirement: "事件经过，有细节有时间地点人物武器，才有可信度"
+      - name: "大众影响"
+        duration: "12-18秒"
+        requirement: "这件事和普通人生活有什么关系，和哪个群体相关"
+      - name: "内行视角"
+        duration: "18-25秒"
+        requirement: "金融逻辑植入，说给内行听，品种+逻辑+第二层含义"
+      - name: "结尾"
+        duration: "25-30秒"
+        requirement: "2小时承诺+强调差异化+互动CTA，不给投资建议"
+
+  # 结尾CTA固定模板
+  closing_template: |
+    你觉得{topic}背后还有没有更深的一层？
+    关注我——每个地缘热点，2小时内给你别人没看到的第二层。
+    不是新闻搬运，是逻辑延伸。
+    点赞收藏，我们下个热点见。
+
+  # 合规红线（禁止）
+  compliance_forbidden:
+    - "多头考虑减仓"
+    - "空头可以入场"
+    - "原油XX合约必涨"
+    - "建议买入/卖出"
+    - "跟着我操作"
+    - "确定性结论（如：一定涨、必定跌）"
+  compliance_allowed:
+    - "XX品种可能受影响"
+    - "波动率可能加大"
+    - "注意风险"
+    - "懂的人已经在关注"
+
+  # 病毒传播钩子（大众部分）
+  hooks:
+    - id: fire_hook
+      template: "{location}火光冲天！{subject}刚刚发生了什么？"
+      when: "有现场画面/冲突场景"
+    - id: surprising_fact
+      template: "所有人都以为{common_belief}。但真相是{real_fact}"
+      when: "有反常识信息"
+    - id: numbers_shock
+      template: "每天{volume}桶原油通过这里——这个地方出事，所有人受影响"
+      when: "有数据支撑"
+
+  # CTA变体（结尾轮换）
+  cta_variants:
+    - "关注我——每个地缘热点，2小时内给你别人没看到的第二层。"
+    - "点赞收藏，下个热点见。"
+    - "你觉得这事对市场影响大吗？评论区聊聊。"
+
+  tone: "专业、冷静、有深度，不煽情不标题党"
+  pacing: "节奏稳定，开头快冲击，中段稳叙述，结尾强CTA"
+  word_count: "150 to 200"
+
+  # 禁止使用的陈词滥调
+  forbidden_phrases:
+    - "大家好"
+    - "今天我们来聊聊"
+    - "众所周知"
+    - "首先其次最后"
+    - "喜欢的朋友点个赞"
+    - "感谢观看"
+    - "下期再见"
+
+visuals:
+  style: "情报室风格/军事地图/HUD界面/K线叠加/雷达扫描"
+  mood: "专业、冷静、深度感"
+  subjects:
+    prefer:
+      - "军事战略地图标注"
+      - "情报室HUD界面"
+      - "K线图叠加靶心"
+      - "雷达扫描效果"
+      - "K线图叠加金色准星"
+    avoid:
+      - "娱乐场景"
+      - "纯风景画面"
+  prompt_suffix: "高对比度，电影级质感，情报室风格"
+
+voice:
+  pace: "中速，约160 wpm"
+  energy: "沉稳、有说服力"
+  style: "冷静分析感，有重量感"
+  suggested_voices:
+    dashscope: "longanyang"
+    edge_tts: "zh-CN-YunxiNeural"
+
+captions:
+  highlight_color: "#FFD700"
+  text_color: "#FFFFFF"
+  font_size: 80
+  font_weight: "bold"
+  position: "center"
+  words_per_group: 4
+
+music:
+  mood: "紧张、悬疑、专业感"
+  energy: "medium"
+  duck_volume_speech: 0.08
+  duck_volume_gap: 0.20
+
+thumbnail:
+  style: "高对比度+专业感+K线元素或地图元素"
+  text_position: "center"
+  guidelines:
+    - "标题不超过8个字"
+    - "必须有金融或军事视觉元素"
+    - "颜色用金色+深色背景"
+
+discovery:
+  hot_sources:
+    - "微博热搜"
+    - "百度热搜"
+    - "今日头条"
+  target_topics:
+    - "地缘政治事件"
+    - "军事冲突"
+    - "国际关系"
+    - "原油/黄金/军工相关事件"
