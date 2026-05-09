@@ -22,7 +22,9 @@ def init_state():
             "image_count": 3,
             "video_count": 0,
             "use_video_api": False,
-            "start_with_video": False
+            "start_with_video": False,
+            "use_local": False,      # 新增：是否使用历史素材
+            "theme": None           # 新增：素材主题
         },
         "hot_topics": [],
         "selected_index": 0,
@@ -50,38 +52,75 @@ def parse_user_input(user_input: str, state: dict) -> dict:
     """解析用户输入，更新状态"""
     import re
 
-    parts = user_input.strip().split()
+    # 清理输入
+    user_input = user_input.strip()
+
+    # 新格式：文案3/视频1,切换2秒
+    # 支持：文案X/视频Y/图片Z,切换N秒
+    # 支持：视频X,切换N秒
+    # 支持：图片X/视频Y,切换N秒
+
+    # 首先检查是否有切换秒数（支持小数）
+    switch_match = re.search(r'切换(\d+(?:\.\d+)?)秒', user_input)
+    if switch_match:
+        state["params"]["switch_seconds"] = float(switch_match.group(1))
+        # 移除切换秒数部分，只保留素材部分
+        user_input = re.sub(r',?\s*切换\d+(?:\.\d+)?秒', '', user_input)
+
+    # 解析素材部分
+    # 格式：文案3/视频1 或 视频1/图片2 等
+    parts = user_input.split('/')
+
+    # 重置计数
+    state["params"]["image_count"] = 0
+    state["params"]["video_count"] = 0
+    state["params"]["use_video_api"] = False
 
     for part in parts:
-        # 纯数字 = 选择热点编号
-        if part.isdigit():
+        part = part.strip()
+        if not part:
+            continue
+
+        # 检查是否是纯数字（热点编号）
+        if part.isdigit() and len(parts) == 1:
             idx = int(part) - 1
             if 0 <= idx < len(state.get("hot_topics", [])):
                 state["selected_index"] = idx
                 state["topic"] = state["hot_topics"][idx]["title"]
+            continue
 
-        # 切换X秒
-        elif match := re.match(r"切换(\d+)秒", part):
-            state["params"]["switch_seconds"] = int(match.group(1))
-
-        # 图片X
-        elif match := re.match(r"图片(\d+)", part):
-            state["params"]["image_count"] = int(match.group(1))
-
-        # 视频X
-        elif match := re.match(r"视频(\d+)", part):
-            state["params"]["video_count"] = int(match.group(1))
-            state["params"]["use_video_api"] = True
-
-        # 开头视频
-        elif part == "开头视频":
+        # 解析素材类型和数量
+        if '文案' in part:
+            # 文案数量，主要用于计算总素材数
+            match = re.search(r'文案(\d+)', part)
+            if match:
+                # 文案本身不生成素材，但影响总素材数
+                pass
+        elif '图片' in part:
+            match = re.search(r'图片(\d+)', part)
+            if match:
+                state["params"]["image_count"] = int(match.group(1))
+        elif '视频' in part:
+            match = re.search(r'视频(\d+)', part)
+            if match:
+                state["params"]["video_count"] = int(match.group(1))
+                state["params"]["use_video_api"] = True
+        elif '开头视频' in part:
             state["params"]["start_with_video"] = True
-
-        # 其他 = 自定义主题
-        elif not part.startswith("切换") and not part.startswith("图片"):
+        elif '历史素材' in part:
+            state["params"]["use_local"] = True
+            # 提取主题
+            theme_match = re.search(r'历史素材\s*[:：]?\s*(\w+)', part)
+            if theme_match:
+                state["params"]["theme"] = theme_match.group(1)
+        else:
+            # 如果不是素材格式，可能是自定义主题
             if not state["topic"]:
-                state["topic"] = user_input.strip()
-                break
+                state["topic"] = part
+
+    # 如果没有设置切换秒数，使用默认值
+    if "switch_seconds" not in state["params"] or state["params"]["switch_seconds"] <= 0:
+        state["params"]["switch_seconds"] = 2.0
 
     return state
 
