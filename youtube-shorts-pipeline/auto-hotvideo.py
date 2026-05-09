@@ -624,7 +624,7 @@ def _assemble_mixed(
 
         animated_segments.append(seg_path)
 
-    # 拼接所有片段
+    # 拼接所有片段（使用 -fflags +genpts 确保时间戳正确）
     concat_file = work_dir / "concat.txt"
     def _esc(p):
         return str(p).replace("'", "'\\''")
@@ -632,8 +632,10 @@ def _assemble_mixed(
 
     merged_video = work_dir / "merged_video.mp4"
     subprocess.run([
-        FFMPEG, "-f", "concat", "-safe", "0", "-i", str(concat_file),
+        FFMPEG, "-f", "concat", "-safe", "0", "-fflags", "+genpts",
+        "-i", str(concat_file),
         "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+        "-t", str(audio_duration),  # 确保输出时长匹配音频
         str(merged_video), "-y", "-loglevel", "quiet",
     ], check=True)
 
