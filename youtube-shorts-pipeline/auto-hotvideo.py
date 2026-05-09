@@ -126,6 +126,35 @@ def load_task_state(job_id: str) -> dict:
     return None
 
 
+def generate_broll_prompts_from_script(script: str, count: int, niche: str = "general") -> list:
+    """从文案生成B-roll提示词"""
+    from verticals.llm import call_llm
+
+    prompt = f"""根据以下文案内容，生成{count}个视觉画面描述，用于AI生成图片。
+
+文案：
+{script}
+
+要求：
+1. 每个画面描述要具体、视觉化
+2. 画面要与文案内容相关
+3. 风格统一，适合短视频
+4. 每个描述一行，不要编号
+
+直接输出{count}行画面描述："""
+
+    try:
+        result = call_llm(prompt, max_tokens=500)
+        prompts = [p.strip() for p in result.strip().split('\n') if p.strip()]
+        # 确保数量正确
+        while len(prompts) < count:
+            prompts.append("Cinematic scene, dramatic lighting")
+        return prompts[:count]
+    except Exception as e:
+        log(f"生成B-roll提示词失败: {e}")
+        return ["Cinematic scene, dramatic lighting"] * count
+
+
 def find_incomplete_tasks() -> list:
     """查找未完成的任务"""
     incomplete = []
@@ -147,6 +176,8 @@ def make_video(
     video_count: int = 0,
     start_with_video: bool = False,
     skip_approval: bool = False,
+    direct_script: str = None,
+    script_source: str = "hot",
 ) -> dict:
     """
     生成视频
@@ -160,6 +191,8 @@ def make_video(
         video_count: 视频片段数量
         start_with_video: 开头是否使用视频
         skip_approval: 是否跳过审批（用于已获批准的继续执行）
+        direct_script: 直接输入的文案（跳过热点改写）
+        script_source: 文案来源（hot/direct/transcribe）
 
     Returns:
         dict: 包含video_path, script, title等信息，或需要审批的信息
@@ -171,6 +204,21 @@ def make_video(
     from verticals.music import select_and_prepare_music
     from verticals.assemble import assemble_video, get_audio_duration
     from verticals.state import PipelineState
+
+    # 如果是视频链接，先转录
+    if script_source == "transcribe" and direct_script:
+        from verticals.video_transcriber import transcribe_video
+        log(f"转录视频链接: {direct_script}")
+        transcribe_result = transcribe_video(direct_script)
+        if transcribe_result['success']:
+            direct_script = transcribe_result['transcript']
+            script_source = "direct"
+            log(f"转录成功: {len(direct_script)}字, 时长{transcribe_result['duration']:.1f}秒")
+        else:
+            return {
+                "status": "error",
+                "error": f"视频转录失败: {transcribe_result.get('error', 'unknown')}"
+            }
 
     # 检查是否需要审批
     if not skip_approval and is_approval_required():
@@ -223,12 +271,27 @@ def make_video(
     save_task_state(job_id, topic, "draft", stages, params)
 
     # 1. 生成脚本
-    log(f"生成脚本: {topic}")
     stages["draft"]["status"] = "in_progress"
     save_task_state(job_id, topic, "draft", stages, params)
 
-    draft = generate_draft(topic, "", niche=niche, platform="shorts", viral_mode=False)
-    draft["job_id"] = job_id
+    # 根据文案来源决定生成方式
+    if script_source == "direct" and direct_script:
+        # 直接使用用户输入的文案
+        log(f"使用直接输入的文案: {direct_script[:50]}...")
+        script = direct_script
+        title = topic if topic else "短视频"
+        prompts = generate_broll_prompts_from_script(script, image_count, niche)
+        draft = {
+            "job_id": job_id,
+            "script": script,
+            "youtube_title": title,
+            "broll_prompts": prompts,
+        }
+    else:
+        # 从热点生成脚本
+        log(f"生成脚本: {topic}")
+        draft = generate_draft(topic, "", niche=niche, platform="shorts", viral_mode=False)
+        draft["job_id"] = job_id
 
     # 保存draft
     draft_path = DRAFTS_DIR / f"{job_id}.json"
@@ -610,6 +673,19 @@ def cmd_hot(args):
 
 def cmd_make(args):
     """生成视频命令"""
+    # 尝试从状态文件读取直接文案
+    state_file = Path.home() / ".openclaw" / "memory" / "auto-hotvideo-state.json"
+    direct_script = None
+    script_source = "hot"
+
+    if state_file.exists():
+        try:
+            state = json.loads(state_file.read_text())
+            direct_script = state.get("params", {}).get("direct_script")
+            script_source = state.get("script_source", "hot")
+        except:
+            pass
+
     result = make_video(
         topic=args.topic,
         niche=getattr(args, 'niche', 'multi_empty_bureau'),
@@ -619,6 +695,8 @@ def cmd_make(args):
         video_count=getattr(args, 'videos', 0),
         start_with_video=getattr(args, 'start_video', False),
         skip_approval=getattr(args, 'skip_approval', False),
+        direct_script=direct_script,
+        script_source=script_source,
     )
 
     if args.json:
