@@ -101,7 +101,7 @@ voice:
 captions:
   highlight_color: "#FFD700"
   text_color: "#FFFFFF"
-  font_size: 80
+  font_size: 96  # 加大20% (原80)
   font_weight: "bold"
   position: "center"
   words_per_group: 4

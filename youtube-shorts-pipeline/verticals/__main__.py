@@ -137,6 +137,7 @@ def cmd_produce(args):
             vo_path, work_dir,
             duck_speech=music_config.get("duck_volume_speech", 0.12),
             duck_gap=music_config.get("duck_volume_gap", 0.25),
+            niche=profile.get("niche", "general"),
         )
         state.complete_stage("music", {
             "track_path": str(music_result.get("track_path", "")),

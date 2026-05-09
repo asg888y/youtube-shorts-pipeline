@@ -9,6 +9,17 @@ from .log import log
 # Music directory ships with the package
 MUSIC_DIR = Path(__file__).resolve().parent.parent / "music"
 
+# 风格对应的音乐子目录和情绪关键词
+NICHE_MUSIC_CONFIG = {
+    "emotion": {"subdir": "emotion", "mood": "warm calm emotional"},
+    "viral": {"subdir": "viral", "mood": "energetic intense dramatic"},
+    "knowledge": {"subdir": "knowledge", "mood": "professional clear informative"},
+    "horror": {"subdir": "horror", "mood": "dark suspense mysterious"},
+    "tech": {"subdir": "tech", "mood": "modern electronic futuristic"},
+    "general": {"subdir": "general", "mood": "ambient neutral"},
+    "multi_empty_bureau": {"subdir": "tech", "mood": "tense serious"},
+}
+
 # 国内免费音乐资源
 FREE_MUSIC_SOURCES = {
     # 爱给网 - 免费音效/背景音乐
@@ -93,10 +104,32 @@ def _fetch_free_music(mood: str = "ambient") -> Path | None:
     return None
 
 
-def _find_tracks() -> list[Path]:
-    """Find all MP3 tracks in the music/ directory."""
+def _find_tracks(niche: str = None) -> list[Path]:
+    """Find all MP3 tracks in the music/ directory.
+
+    If niche is specified, look in style-specific subdirectory first.
+    Falls back to general music if niche has no tracks.
+    """
     if not MUSIC_DIR.exists():
         return []
+
+    # If niche specified, try niche-specific directory first
+    if niche and niche in NICHE_MUSIC_CONFIG:
+        niche_dir = MUSIC_DIR / NICHE_MUSIC_CONFIG[niche]["subdir"]
+        if niche_dir.exists():
+            tracks = sorted(niche_dir.glob("*.mp3"))
+            if tracks:
+                log(f"Using {niche} style music ({len(tracks)} tracks)")
+                return tracks
+
+    # Fall back to general music
+    general_dir = MUSIC_DIR / "general"
+    if general_dir.exists():
+        tracks = sorted(general_dir.glob("*.mp3"))
+        if tracks:
+            return tracks
+
+    # Last resort: all music in root
     return sorted(MUSIC_DIR.glob("*.mp3"))
 
 
@@ -162,18 +195,21 @@ def select_and_prepare_music(
     duck_speech: float = 0.12,
     duck_gap: float = 0.25,
     mood: str = "ambient",
+    niche: str = None,
 ) -> dict:
     """Select a random track, build duck filter from speech regions.
 
     Falls back to network music fetch if no local tracks.
     Returns dict with track_path and duck_filter for use by assemble.py.
     """
-    tracks = _find_tracks()
+    tracks = _find_tracks(niche=niche)
 
     # If no local tracks, try to fetch from network
     if not tracks:
         log("No local music tracks — trying network fetch...")
-        network_track = _fetch_free_music(mood)
+        # Use niche-specific mood if available
+        fetch_mood = NICHE_MUSIC_CONFIG.get(niche, {}).get("mood", mood) if niche else mood
+        network_track = _fetch_free_music(fetch_mood)
         if network_track:
             tracks = [network_track]
 

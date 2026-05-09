@@ -300,12 +300,13 @@ def make_video(
     save_task_state(job_id, topic, "draft", stages, params)
 
     # 根据文案来源决定生成方式
+    total_media_count = image_count + video_count  # 总素材数 = 图片 + 视频
     if script_source == "direct" and direct_script:
         # 直接使用用户输入的文案
         log(f"使用直接输入的文案: {direct_script[:50]}...")
         script = direct_script
         title = topic if topic else "短视频"
-        prompts = generate_broll_prompts_from_script(script, image_count, niche)
+        prompts = generate_broll_prompts_from_script(script, total_media_count, niche)
         draft = {
             "job_id": job_id,
             "script": script,
@@ -333,37 +334,37 @@ def make_video(
     result["script"] = draft.get("script", "")
     result["title"] = draft.get("youtube_title", "")
 
-    prompts = draft.get("broll_prompts", ["Cinematic scene"] * image_count)
+    prompts = draft.get("broll_prompts", ["Cinematic scene"] * total_media_count)
 
     # 素材数量校验和警告（不自动覆盖用户指定值）
     script_text = draft.get("script", "")
     if script_text:
         # 估算音频时长（中文约3-4字/秒）
         estimated_duration = len(script_text) / 3.5
-        required_images = math.ceil(estimated_duration / switch_seconds)
+        required_media = math.ceil(estimated_duration / switch_seconds)
 
-        if image_count < required_images:
+        if total_media_count < required_media:
             log(f"")
             log(f"⚠️  素材数量警告")
             log(f"   文案长度: {len(script_text)}字")
             log(f"   预估时长: {estimated_duration:.0f}秒")
             log(f"   切换间隔: {switch_seconds}秒")
-            log(f"   用户指定: {image_count}张")
-            log(f"   建议数量: {required_images}张")
-            log(f"   每张图片将播放: {estimated_duration/image_count:.1f}秒")
+            log(f"   用户指定: {total_media_count}个素材 (图片{image_count}+视频{video_count})")
+            log(f"   建议数量: {required_media}个")
+            log(f"   每个素材将播放: {estimated_duration/total_media_count:.1f}秒")
             log(f"")
             log(f"⚠️  素材不足可能导致视频被截断！")
-            log(f"   建议：增加图片数量或缩短文案")
+            log(f"   建议：增加素材数量或缩短文案")
             log(f"")
             # 不自动覆盖用户指定值，让用户决定
-            # image_count = required_images  # 已移除自动覆盖
 
-            # 补充 prompts
-            while len(prompts) < image_count:
+            # 补充 prompts（确保总数足够）
+            while len(prompts) < total_media_count:
                 prompts.append(f"Cinematic scene, dramatic lighting, style {len(prompts)+1}")
 
             # 更新 params
             params["image_count"] = image_count
+            params["video_count"] = video_count
 
     # 2. 生成素材（图片+视频混合）
     video_segments = []
@@ -444,7 +445,20 @@ def make_video(
     stages["voiceover"]["status"] = "in_progress"
     save_task_state(job_id, topic, "voiceover", stages, params)
 
-    vo_path = generate_voiceover(draft.get("script", ""), work_dir, "zh", provider="dashscope")
+    # 读取niche配置中的voice设置
+    from verticals.niche import load_niche
+    niche = params.get("niche", "general")
+    niche_profile = load_niche(niche)
+    voice_config = niche_profile.get("voice", {})
+    suggested_voices = voice_config.get("suggested_voices", {})
+    dashscope_voice = suggested_voices.get("dashscope", "longanyang")
+
+    vo_path = generate_voiceover(
+        draft.get("script", ""), work_dir, "zh",
+        provider="dashscope",
+        voice_config={"voice_id": dashscope_voice}
+    )
+    log(f"使用音色: {dashscope_voice}")
 
     stages["voiceover"]["status"] = "completed"
     stages["voiceover"]["output"] = str(vo_path)
@@ -457,7 +471,19 @@ def make_video(
     stages["captions"]["status"] = "in_progress"
     save_task_state(job_id, topic, "captions", stages, params)
 
-    captions_result = generate_captions(vo_path, work_dir, "zh")
+    # 读取niche配置中的字幕设置
+    caption_config = niche_profile.get("captions", {})
+    caption_highlight = caption_config.get("highlight_color", "#FFFF00")
+    caption_font_size = caption_config.get("font_size", 86)  # 默认加大20%
+    caption_words_per_group = caption_config.get("words_per_group", 4)
+
+    captions_result = generate_captions(
+        vo_path, work_dir, "zh",
+        highlight_color=caption_highlight,
+        words_per_group=caption_words_per_group,
+        font_size=caption_font_size,
+    )
+    log(f"字幕配置: font_size={caption_font_size}, highlight={caption_highlight}")
     ass_path = captions_result.get("ass_path")
     srt_path = captions_result.get("srt_path")
 
@@ -467,7 +493,8 @@ def make_video(
 
     # 5. 准备音乐
     log("准备背景音乐...")
-    music_result = select_and_prepare_music(vo_path, work_dir)
+    niche = params.get("niche", "general")
+    music_result = select_and_prepare_music(vo_path, work_dir, niche=niche)
     music_path = music_result.get("track_path")
     duck_filter = music_result.get("duck_filter")
 

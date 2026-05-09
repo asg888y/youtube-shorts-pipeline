@@ -84,7 +84,7 @@ voice:
 captions:
   highlight_color: "#FF0000"
   text_color: "#FFFFFF"
-  font_size: 80
+  font_size: 96  # 加大20% (原80)
   font_weight: "bold"
   position: "center"
   words_per_group: 3  # 病毒传播用更短的词组

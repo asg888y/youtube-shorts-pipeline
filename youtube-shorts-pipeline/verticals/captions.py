@@ -66,11 +66,20 @@ def _format_ass_time(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
 
-def _generate_ass(words: list[dict], output_path: Path, video_width: int = 1080, video_height: int = 1920, highlight_color: str = "#FFFF00", group_size: int = 4):
+def _generate_ass(words: list[dict], output_path: Path, video_width: int = 1080, video_height: int = 1920, highlight_color: str = "#FFFF00", group_size: int = 4, font_size: int = 86):
     """Generate ASS subtitle file with word-by-word color highlighting.
 
     White text for inactive words, yellow for current word.
     Semi-transparent background, positioned at lower third (~70% down).
+
+    Args:
+        words: List of word dicts with "word", "start", "end"
+        output_path: Path to save .ass file
+        video_width: Video width (default 1080 for vertical)
+        video_height: Video height (default 1920 for vertical)
+        highlight_color: Hex color for highlighted word (default yellow)
+        group_size: Words per subtitle line (default 4)
+        font_size: Font size in points (default 86, 20% larger than original 72)
     """
     # ASS header
     margin_v = int(video_height * 0.25)  # ~75% down from top = 25% from bottom
@@ -83,7 +92,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,3,3,0,2,40,40,{margin_v},1
+Style: Default,Arial,{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,3,3,0,2,40,40,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -165,10 +174,19 @@ def generate_captions(
     lang: str = "en",
     highlight_color: str = "#FFFF00",
     words_per_group: int = 4,
+    font_size: int = 86,
 ) -> dict:
     """Generate captions: ASS (for burn-in) + SRT (for YouTube upload).
 
     Returns dict with keys: srt_path, ass_path, words (for music ducking).
+
+    Args:
+        audio_path: Path to audio file
+        work_dir: Working directory for output files
+        lang: Language code (default "en")
+        highlight_color: Hex color for highlighted word (default yellow)
+        words_per_group: Words per subtitle line (default 4)
+        font_size: Font size in points (default 86, 20% larger than original 72)
     """
     words = _whisper_word_timestamps(audio_path, lang)
 
@@ -201,9 +219,9 @@ def generate_captions(
     _generate_srt(words, srt_path, group_size=words_per_group)
     result["srt_path"] = str(srt_path)
 
-    # Generate ASS for burn-in (niche-aware highlight color)
+    # Generate ASS for burn-in (niche-aware highlight color and font size)
     ass_path = work_dir / f"captions_{lang}.ass"
-    _generate_ass(words, ass_path, highlight_color=highlight_color, group_size=words_per_group)
+    _generate_ass(words, ass_path, highlight_color=highlight_color, group_size=words_per_group, font_size=font_size)
     result["ass_path"] = str(ass_path)
 
     return result

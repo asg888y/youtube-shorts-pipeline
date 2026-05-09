@@ -28,7 +28,7 @@ voice:
 captions:
   highlight_color: "#FFFF00"
   text_color: "#FFFFFF"
-  font_size: 72
+  font_size: 86  # 加大20% (原72)
   font_weight: "bold"
   words_per_group: 4
 
