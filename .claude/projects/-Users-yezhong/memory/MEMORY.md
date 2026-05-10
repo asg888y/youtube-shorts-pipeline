@@ -22,3 +22,4 @@
 - [MetaGPT Setup](metagpt_setup.md) — conda环境，讯飞API，终端命令metagpt直接启动
 - [热点视频配置调用流程](hotvideo_config_flow.md) — ⭐ 完整配置链路：skill→state_helper→niche→draft→broll，修改时一步到位
 - [OpenClaw进度输出机制](openclaw_progress_output.md) — ⭐ 解决typing 2分钟超时：typingTtlSeconds配置+进度消息工具（两个长期方案已实施）
+- [OpenClaw Sandbox启动方式](openclaw_sandbox_startup.md) — ⭐ 必须用start-debug.sh，禁止用sandbox-exec（macOS 26不兼容）
