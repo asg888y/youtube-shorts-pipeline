@@ -435,25 +435,19 @@ def make_video(
             log(f"图片生成失败: {e}")
             failed_images = image_count
 
-    # 检查是否有失败需要重试
-    if (failed_images > 0 or failed_videos > 0) and is_approval_required():
-        stages["broll"]["status"] = "failed"
+    # 检查是否有失败，记录但不阻止任务继续
+    if failed_images > 0 or failed_videos > 0:
+        log(f"警告: {failed_images}张图片失败, {failed_videos}个视频失败，使用fallback继续")
         stages["broll"]["failed_images"] = failed_images
         stages["broll"]["failed_videos"] = failed_videos
-        save_task_state(job_id, topic, "broll", stages, params)
 
-        retry_approval = request_approval(0, 0, is_retry=True, retry_info={
-            "failed_images": failed_images,
-            "failed_videos": failed_videos,
-        })
-        return {
-            "status": "need_retry",
-            "need_approval": True,
-            "message": retry_approval["message"],
-            "job_id": job_id,
-            "failed_images": failed_images,
-            "failed_videos": failed_videos,
-        }
+    # 如果视频生成失败，使用图片fallback
+    if failed_videos > 0 and len(video_segments) < video_count:
+        log(f"使用图片替代失败的视频片段")
+        # 从image_frames中借用图片作为fallback
+        for i in range(video_count - len(video_segments)):
+            if image_frames:
+                video_segments.append(image_frames[i % len(image_frames)])
 
     stages["broll"]["status"] = "completed"
     save_task_state(job_id, topic, "voiceover", stages, params)
