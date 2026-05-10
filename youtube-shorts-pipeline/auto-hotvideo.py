@@ -768,14 +768,18 @@ def _adjust_video_duration(src_path: Path, out_path: Path, target_duration: floa
         subprocess.run([
             FFMPEG, "-i", str(src_path), "-t", str(target_duration),
             "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", str(out_path), "-y", "-loglevel", "quiet"
+            "-r", "30",  # 强制30fps
+            "-c:a", "aac", "-ar", "44100",  # 强制音频采样率
+            str(out_path), "-y", "-loglevel", "quiet"
         ], check=True)
     else:
         # 循环
         subprocess.run([
             FFMPEG, "-stream_loop", "-1", "-i", str(src_path), "-t", str(target_duration),
             "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", str(out_path), "-y", "-loglevel", "quiet"
+            "-r", "30",  # 强制30fps
+            "-c:a", "aac", "-ar", "44100",  # 强制音频采样率
+            str(out_path), "-y", "-loglevel", "quiet"
         ], check=True)
 
 
