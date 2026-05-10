@@ -16,6 +16,9 @@
 - [修改前强制检查DEPENDENCIES.md](dependencies_check_required.md) — ⭐ 修改任何项目前必须先读取依赖文件
 - [Pixelle-Video v1.1 状态](pixelle_v1.1_state.md) — 横屏轮播测试完成，7/7素材，1920x1080，待接入CosyVoice+速创
 - [快车VPN代理配置](kuaiche-proxy.md) — 按需使用代理(port 7890)，不影响全局，会话用国内网络
-- [飞书-Aider 桥接配置](aider-feishu-bridge.md) — ⭐ 飞书远程控制 Aider，中文输出需改源码提示词
-- [飞书桥接状态 2026-05-08](feishu_bridge_status.md) — 飞书审批已启用，微信限流暂停
-- [StockBar项目](stockbar_project.md) — macOS状态栏股票期货行情显示器，中文配置文件
+- [飞书桥接状态 2026-05-08](feishu_bridge_status.md) — 完全公开模式配置完成，待解决公网访问验证
+- [OpenClaw Skill激活机制](openclaw_skill_activation.md) — 多轮对话状态持久化，无需每次激活
+- [OpenClaw Sandbox 部署](openclaw_sandbox.md) — ⭐ 独立沙箱环境：配置、常用命令、模型切换、维护要点
+- [MetaGPT Setup](metagpt_setup.md) — conda环境，讯飞API，终端命令metagpt直接启动
+- [热点视频配置调用流程](hotvideo_config_flow.md) — ⭐ 完整配置链路：skill→state_helper→niche→draft→broll，修改时一步到位
+- [OpenClaw进度输出机制](openclaw_progress_output.md) — ⭐ 解决typing 2分钟超时：typingTtlSeconds配置+进度消息工具（两个长期方案已实施）
