@@ -97,7 +97,7 @@ def save_state(state: dict):
 
 
 def _parse_material_params(params_str: str, state: dict) -> dict:
-    """解析素材参数"""
+    """解析素材参数（旧格式，用/分隔）"""
     import re
 
     # 检查是否有切换秒数（支持小数）
@@ -127,14 +127,104 @@ def _parse_material_params(params_str: str, state: dict) -> dict:
     return state
 
 
+def _parse_params_parentheses(params_str: str, state: dict) -> dict:
+    """解析括号内的参数（新格式）
+
+    格式：图片3，切换2秒，风格:business
+    用逗号或顿号分隔
+    """
+    import re
+
+    # 用逗号、顿号分隔
+    parts = re.split(r'[，,、]', params_str)
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+
+        # 图片数量
+        if '图片' in part:
+            match = re.search(r'图片(\d+)', part)
+            if match:
+                state["params"]["image_count"] = int(match.group(1))
+
+        # 视频数量
+        elif '视频' in part:
+            match = re.search(r'视频(\d+)', part)
+            if match:
+                state["params"]["video_count"] = int(match.group(1))
+                state["params"]["use_video_api"] = True
+
+        # 切换秒数
+        elif '切换' in part:
+            match = re.search(r'切换(\d+(?:\.\d+)?)秒?', part)
+            if match:
+                state["params"]["switch_seconds"] = float(match.group(1))
+
+        # 风格
+        elif '风格' in part or 'style' in part.lower():
+            match = re.search(r'(?:风格|style)[:：]?\s*(\w+)', part, re.IGNORECASE)
+            if match:
+                niche = match.group(1).lower()
+                valid_niches = ['general', 'viral', 'emotion', 'knowledge', 'horror', 'tech', 'business']
+                if niche in valid_niches:
+                    state["params"]["niche"] = niche
+                    log(f"设置视觉风格: {niche}")
+            else:
+                # 尝试中文风格名
+                niche = _parse_chinese_niche(part)
+                if niche:
+                    state["params"]["niche"] = niche
+                    log(f"设置视觉风格: {niche}")
+
+        # 画面/视觉风格（中文）
+        elif '画面' in part or '视觉' in part:
+            niche = _parse_chinese_niche(part)
+            if niche:
+                state["params"]["niche"] = niche
+                log(f"设置视觉风格: {niche}")
+
+    return state
+
+
 def parse_user_input(user_input: str, state: dict) -> dict:
-    """解析用户输入，更新状态"""
+    """解析用户输入，更新状态
+
+    标准格式：
+    - 【文案内容】（图片3，切换2秒，风格:business）
+    - 【文案...】里面是文案，（）里面是参数
+    """
     import re
 
     # 清理输入
     user_input = user_input.strip()
 
-    # 检查是否是直接文案输入（以"文案："或"script:"开头）
+    # 新格式：【文案...】（参数...）
+    # 提取【】内的文案和（）内的参数
+    script_match = re.search(r'【(.+?)】', user_input, re.DOTALL)
+    params_match = re.search(r'（(.+?)）', user_input)
+
+    if script_match:
+        # 提取文案内容
+        script_content = script_match.group(1).strip()
+        # 移除可能的前缀"文案："
+        if script_content.startswith('文案：') or script_content.startswith('文案:'):
+            script_content = script_content.split('：' if '：' in script_content else ':', 1)[1].strip()
+
+        state["params"]["direct_script"] = script_content
+        state["script_source"] = "direct"
+        state["stage"] = "approval"
+
+        # 解析参数
+        if params_match:
+            params_str = params_match.group(1)
+            state = _parse_params_parentheses(params_str, state)
+
+        log(f"直接输入文案: {script_content[:50]}...")
+        return state
+
+    # 兼容旧格式：以"文案："开头（无符号标记）
     if user_input.startswith('文案：') or user_input.startswith('文案:') or user_input.lower().startswith('script:'):
         # 提取文案内容
         if user_input.startswith('文案：') or user_input.startswith('文案:'):
@@ -153,8 +243,8 @@ def parse_user_input(user_input: str, state: dict) -> dict:
 
         state["params"]["direct_script"] = script_content
         state["script_source"] = "direct"
-        state["stage"] = "approval"  # 进入审批阶段，而非直接生成
-        log(f"直接输入文案: {script_content[:50]}...")
+        state["stage"] = "approval"
+        log(f"直接输入文案(旧格式): {script_content[:50]}...")
         return state
 
     # 检查是否是视频链接（需要转录）
