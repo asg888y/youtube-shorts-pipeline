@@ -796,26 +796,34 @@ def cmd_hot(args):
 
 def cmd_make(args):
     """生成视频命令"""
-    # 尝试从状态文件读取直接文案
+    # 尝试从状态文件读取所有参数
     state_file = Path.home() / ".openclaw" / "memory" / "auto-hotvideo-state.json"
     direct_script = None
     script_source = "hot"
+    state_params = {}
 
     if state_file.exists():
         try:
             state = json.loads(state_file.read_text())
             direct_script = state.get("params", {}).get("direct_script")
             script_source = state.get("script_source", "hot")
+            state_params = state.get("params", {})
         except:
             pass
 
+    # 优先使用状态文件中的参数，命令行参数作为备选
+    niche = state_params.get("niche") or getattr(args, 'niche', 'general')
+    switch_seconds = state_params.get("switch_seconds") or getattr(args, 'switch', 2.0)
+    image_count = state_params.get("image_count") or getattr(args, 'images', 3)
+    video_count = state_params.get("video_count") or getattr(args, 'videos', 0)
+
     result = make_video(
         topic=args.topic,
-        niche=getattr(args, 'niche', 'multi_empty_bureau'),
+        niche=niche,
         use_video_api=getattr(args, 'video', False),
-        switch_seconds=getattr(args, 'switch', 2.0),
-        image_count=getattr(args, 'images', 3),
-        video_count=getattr(args, 'videos', 0),
+        switch_seconds=switch_seconds,
+        image_count=image_count,
+        video_count=video_count,
         start_with_video=getattr(args, 'start_video', False),
         skip_approval=getattr(args, 'skip_approval', False),
         direct_script=direct_script,
