@@ -315,6 +315,7 @@ def make_video(
         "video_count": video_count,
         "use_video_api": use_video_api,
         "start_with_video": start_with_video,
+        "niche": niche,
     }
 
     result = {
