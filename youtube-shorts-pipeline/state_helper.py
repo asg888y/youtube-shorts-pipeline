@@ -171,8 +171,14 @@ def _parse_params_parentheses(params_str: str, state: dict) -> dict:
                 if niche in valid_niches:
                     state["params"]["niche"] = niche
                     log(f"设置视觉风格: {niche}")
+                else:
+                    # 英文风格名不匹配，尝试中文
+                    niche = _parse_chinese_niche(part)
+                    if niche:
+                        state["params"]["niche"] = niche
+                        log(f"设置视觉风格: {niche}")
             else:
-                # 尝试中文风格名
+                # 无冒号格式，直接尝试中文风格名
                 niche = _parse_chinese_niche(part)
                 if niche:
                     state["params"]["niche"] = niche
