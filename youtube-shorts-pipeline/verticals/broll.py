@@ -3,6 +3,7 @@
 import base64
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import requests
@@ -269,7 +270,7 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
     # 上限20张
     prompts = prompts[:20]
     num_frames = len(prompts)
-    frames = []
+    frames = [None] * num_frames  # 预分配结果列表
 
     # 确定风格（默认general）
     niche = niche or "general"
@@ -278,21 +279,21 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
     if use_local:
         log(f"使用历史素材（风格: {niche}, 主题: {theme or '通用'}）...")
         for i in range(num_frames):
-            frames.append(_fallback_frame(i, out_dir, theme, niche))
+            frames[i] = _fallback_frame(i, out_dir, theme, niche)
         return frames
 
     api_key = _get_runninghub_key()
     if not api_key:
         log("No RUNNINGHUB_API_KEY found — using fallback frames")
         for i in range(num_frames):
-            frames.append(_fallback_frame(i, out_dir, theme, niche))
+            frames[i] = _fallback_frame(i, out_dir, theme, niche)
         return frames
 
     # 生成日期后缀
     date_suffix = datetime.now().strftime("%Y%m%d")
 
-    for i, prompt in enumerate(prompts):
-        # 命名规则：风格_日期_序号.png（如 business_20260510_01.png）
+    def _generate_single_frame(i: int, prompt: str) -> tuple[int, Path]:
+        """生成单个素材，返回 (index, path)"""
         filename = f"{niche}_{date_suffix}_{i:02d}.png"
         out_path = out_dir / filename
         log(f"Generating b-roll frame {i+1}/{num_frames} via RunningHub...")
@@ -311,7 +312,6 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
             top = (new_h - target_h) // 2
             img = img.crop((left, top, left + target_w, top + target_h))
             img.save(out_path)
-            frames.append(out_path)
 
             # 同时保存到风格素材库（用于后续复用）
             local_assets_dir = Path(__file__).parent.parent / "local_assets" / "images" / niche
@@ -320,9 +320,19 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
             shutil.copy2(out_path, library_path)
             log(f"  已保存到素材库: {niche}/{filename}")
 
+            return (i, out_path)
+
         except Exception as e:
             log(f"Frame {i+1} failed: {e} — using fallback")
-            frames.append(_fallback_frame(i, out_dir, theme, niche))
+            return (i, _fallback_frame(i, out_dir, theme, niche))
+
+    # 并行生成（最多20个线程）
+    log(f"并行生成 {num_frames} 个素材...")
+    with ThreadPoolExecutor(max_workers=min(num_frames, 20)) as executor:
+        futures = [executor.submit(_generate_single_frame, i, prompt) for i, prompt in enumerate(prompts)]
+        for future in as_completed(futures):
+            idx, path = future.result()
+            frames[idx] = path
 
     return frames
 
