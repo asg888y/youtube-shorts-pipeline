@@ -679,18 +679,28 @@ def _assemble_mixed(
 
         animated_segments.append(seg_path)
 
-    # 拼接所有片段（使用 -fflags +genpts 确保时间戳正确）
+    # 拼接所有片段，循环直到达到音频时长
     concat_file = work_dir / "concat.txt"
     def _esc(p):
         return str(p).replace("'", "'\\''")
-    concat_file.write_text("\n".join(f"file '{_esc(p)}'" for p in animated_segments))
+
+    # 计算需要循环多少次
+    total_segment_duration = per_segment_duration * total_segments
+    loop_count = int(audio_duration / total_segment_duration) + 1
+
+    # 写入concat文件，循环素材
+    concat_lines = []
+    for _ in range(loop_count):
+        for seg in animated_segments:
+            concat_lines.append(f"file '{_esc(seg)}'")
+    concat_file.write_text("\n".join(concat_lines))
 
     merged_video = work_dir / "merged_video.mp4"
     subprocess.run([
         FFMPEG, "-f", "concat", "-safe", "0", "-fflags", "+genpts",
         "-i", str(concat_file),
+        "-t", str(audio_duration),  # 截断到音频时长
         "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-        "-t", str(audio_duration),  # 确保输出时长匹配音频
         str(merged_video), "-y", "-loglevel", "quiet",
     ], check=True)
 
