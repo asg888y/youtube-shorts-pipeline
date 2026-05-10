@@ -11,12 +11,87 @@ Supports:
 """
 
 import json
+from pathlib import Path
 
 from .config import PLATFORM_CONFIGS
 from .llm import call_llm
 from .log import log
-from .niche import load_niche, get_script_context, get_visual_context, get_visual_prompt_suffix
+from .niche import load_niche, get_script_context, get_visual_context, get_visual_prompt_suffix, get_scene_modes, get_scene_keywords, get_scene_style
 from .research import research_topic
+
+
+# bd-wenan skill 文件路径
+BD_WENAN_SKILL_PATH = Path.home() / ".openclaw" / "workspace" / "skills" / "bd-wenan" / "SKILL.md"
+
+
+def _load_bd_wenan_framework() -> str:
+    """从 bd-wenan skill 文件加载病毒文案框架。
+
+    如果文件不存在，返回精简版框架。
+    """
+    if not BD_WENAN_SKILL_PATH.exists():
+        log("bd-wenan skill not found, using built-in framework")
+        return _get_builtin_framework()
+
+    try:
+        content = BD_WENAN_SKILL_PATH.read_text(encoding="utf-8")
+        # 提取 --- 之后的正文部分
+        if "---" in content:
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                framework = parts[2].strip()
+                log("Loaded bd-wenan framework from skill file")
+                return f"# 病毒传播文案框架\n\n{framework}"
+
+        # 如果没有 frontmatter，直接使用全部内容
+        log("Loaded bd-wenan framework from skill file (no frontmatter)")
+        return content
+    except Exception as e:
+        log(f"Failed to load bd-wenan skill: {e}")
+        return _get_builtin_framework()
+
+
+def _get_builtin_framework() -> str:
+    """内置的精简版病毒文案框架"""
+    return """
+# 角色：病毒文案策略师
+
+你是一位专攻短视频病毒传播的资深文案策略师，深谙人性弱点和情绪引爆点。
+
+## 强制规则
+
+### 1. 情绪钩子设计（开头12字内必须触发一种）
+- 恐惧型："你再不___，就会___"（触发损失厌恶）
+- 反差型："你以为___，其实___"（打破认知，制造停顿）
+- 归属型："这说的就是你"（让用户对号入座）
+- 好奇型："90%的人不知道___"（制造信息缺口）
+- 愤怒型："凭什么___"（制造不公感，激发站队）
+
+### 2. 金句创作（每个文案至少2个金句）
+金句必须同时满足：
+- 8-18字（易于记忆和口播）
+- 包含对比或矛盾（制造张力）
+- 具备独立传播能力（脱离上下文也成立）
+
+### 3. 文案结构（强制5段式）
+| 段落 | 时长 | 目标 | 禁止事项 |
+|------|------|------|----------|
+| 开头 | 0-3秒 | 一句话让人停下来 | 禁止废话、自我介绍 |
+| 承接 | 3-10秒 | 让用户觉得"说的就是我" | 禁止说教 |
+| 转折 | 10-20秒 | 建立信任，输出金句 | - |
+| 干货 | 20-35秒 | 给用户能带走的东西 | 禁止超过3点 |
+| 结尾 | 35-45秒 | 让人想转发 | - |
+
+### 4. 评论区钩子（文案末尾预埋）
+- 1个反向提问（引导用户分享反面经历）
+- 1个投票型提问（让用户选A还是B）
+- 1个情绪型感叹（引导用户打出一句口头禅）
+
+### 5. 禁止事项
+- 禁止陈词滥调：大家好、众所周知、感谢观看
+- 禁止骑墙：必须有明确观点
+- 禁止空洞概念：用具体场景代替抽象概念
+"""
 
 
 def generate_draft(
@@ -65,6 +140,8 @@ def generate_draft(
 
     # Build visual guidance for b-roll prompts
     visual_guidance = ""
+    scene_keywords = []
+    scene_style_info = {}
     if visual_context:
         vis_parts = []
         if visual_context.get("style"):
@@ -79,6 +156,19 @@ def generate_draft(
         suffix = visual_context.get("prompt_suffix", "")
         if suffix:
             vis_parts.append(f"Append to every b-roll prompt: {suffix}")
+
+        # 场景模式支持
+        scene_config = get_scene_modes(profile)
+        if scene_config["enabled"]:
+            scene_keywords = get_scene_keywords(profile)
+            scene_style_info = get_scene_style(profile)
+            if scene_keywords:
+                vis_parts.append(f"Scene keywords (use some): {', '.join(scene_keywords[:5])}")
+            if scene_style_info.get("color"):
+                vis_parts.append(f"Scene color: {scene_style_info['color']}")
+            if scene_style_info.get("mood"):
+                vis_parts.append(f"Scene mood: {scene_style_info['mood']}")
+
         if vis_parts:
             visual_guidance = "\nB-ROLL VISUAL GUIDANCE:\n" + "\n".join(vis_parts)
 
@@ -97,52 +187,8 @@ def generate_draft(
 
     channel_note = f"\nChannel context: {channel_context}" if channel_context else ""
 
-    # bd-wenan 病毒文案框架（核心质量提升）
-    bd_wenan_framework = """
-# 角色：病毒文案策略师
-
-你是一位专攻短视频病毒传播的资深文案策略师，深谙人性弱点和情绪引爆点。
-
-## 强制规则
-
-### 1. 情绪钩子设计（开头12字内必须触发一种）
-- 恐惧型："你再不___，就会___"（触发损失厌恶）
-- 反差型："你以为___，其实___"（打破认知，制造停顿）
-- 归属型："这说的就是你"（让用户对号入座）
-- 好奇型："90%的人不知道___"（制造信息缺口）
-- 愤怒型："凭什么___"（制造不公感，激发站队）
-
-### 2. 金句创作（每个文案至少2个金句）
-金句必须同时满足：
-- 8-18字（易于记忆和口播）
-- 包含对比或矛盾（制造张力）
-- 具备独立传播能力（脱离上下文也成立）
-
-金句技巧：
-- 对比法：A以为... 其实B...
-- 极端法：把后果说到极致
-- 反问法：用问题引发思考
-- 场景法：构建具体画面
-
-### 3. 文案结构（强制5段式）
-| 段落 | 时长 | 目标 | 禁止事项 |
-|------|------|------|----------|
-| 开头 | 0-3秒 | 一句话让人停下来 | 禁止废话、自我介绍 |
-| 承接 | 3-10秒 | 让用户觉得"说的就是我" | 禁止说教 |
-| 转折 | 10-20秒 | 建立信任，输出金句 | - |
-| 干货 | 20-35秒 | 给用户能带走的东西 | 禁止超过3点 |
-| 结尾 | 35-45秒 | 让人想转发 | - |
-
-### 4. 评论区钩子（文案末尾预埋）
-- 1个反向提问（引导用户分享反面经历）
-- 1个投票型提问（让用户选A还是B）
-- 1个情绪型感叹（引导用户打出一句口头禅）
-
-### 5. 禁止事项
-- 禁止陈词滥调：大家好、众所周知、感谢观看
-- 禁止骑墙：必须有明确观点
-- 禁止空洞概念：用具体场景代替抽象概念
-"""
+    # bd-wenan 病毒文案框架（从skill文件读取，避免硬编码）
+    bd_wenan_framework = _load_bd_wenan_framework()
 
     # 病毒传播模式额外提示
     viral_extra = ""

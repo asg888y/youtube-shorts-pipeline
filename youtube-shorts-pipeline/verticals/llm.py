@@ -243,16 +243,16 @@ def _call_minimax(prompt: str, max_tokens: int) -> str:
     if not api_key:
         raise RuntimeError("MINIMAX_API_KEY not set in config.json")
 
-    url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+    # 使用 Anthropic 兼容接口调用 MiniMax M2.7
+    url = "https://api.minimaxi.com/anthropic/v1/messages"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
     }
-    # 使用abab5.5模型（更广泛支持）
     body = {
-        "model": "abab5.5-chat",
-        "tokens_to_generate": max_tokens,
-        "temperature": 0.7,
+        "model": "MiniMax-M2.7",
+        "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}],
     }
     r = requests.post(url, json=body, headers=headers, timeout=60)
@@ -260,13 +260,16 @@ def _call_minimax(prompt: str, max_tokens: int) -> str:
         raise RuntimeError(f"MiniMax API {r.status_code}: {r.text[:300]}")
 
     data = r.json()
-    choices = data.get("choices", [])
-    if not choices:
-        # 检查是否是模型不支持
-        status_code = data.get("base_resp", {}).get("status_code", 0)
-        status_msg = data.get("base_resp", {}).get("status_msg", "")
-        raise RuntimeError(f"MiniMax error {status_code}: {status_msg}")
-    return choices[0].get("message", {}).get("content", "").strip()
+    # Anthropic 格式返回，content 是数组，可能有 thinking 和 text 两种类型
+    content = data.get("content", [])
+    if not content:
+        raise RuntimeError(f"MiniMax empty response: {data}")
+    # 取 type="text" 的那个
+    for block in content:
+        if block.get("type") == "text":
+            return block.get("text", "").strip()
+    # 如果没有 text 类型，取第一个
+    return content[0].get("text", "").strip()
 
 
 def _call_dashscope(prompt: str, max_tokens: int) -> str:

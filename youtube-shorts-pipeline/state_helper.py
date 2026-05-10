@@ -11,6 +11,51 @@ from pathlib import Path
 STATE_FILE = Path.home() / ".openclaw" / "memory" / "auto-hotvideo-state.json"
 
 
+# 中文风格名称映射
+CHINESE_NICHE_MAP = {
+    # 情感类
+    "情感": "emotion",
+    "情感励志": "emotion",
+    "情感励志风格": "emotion",
+    "温暖": "emotion",
+    "治愈": "emotion",
+    # 病毒传播类
+    "病毒": "viral",
+    "病毒传播": "viral",
+    "冲击": "viral",
+    "震撼": "viral",
+    # 知识类
+    "知识": "knowledge",
+    "科普": "knowledge",
+    "专业": "knowledge",
+    # 恐怖类
+    "恐怖": "horror",
+    "悬疑": "horror",
+    "惊悚": "horror",
+    # 科技类
+    "科技": "tech",
+    "技术": "tech",
+    "未来": "tech",
+    # 商业类
+    "商业": "business",
+    "财富": "business",
+    "奢华": "business",
+    "商业风格": "business",
+    # 通用
+    "通用": "general",
+    "一般": "general",
+}
+
+
+def _parse_chinese_niche(text: str) -> str | None:
+    """解析中文风格名称，返回英文风格代码"""
+    text_lower = text.lower()
+    for cn_name, en_name in CHINESE_NICHE_MAP.items():
+        if cn_name in text_lower:
+            return en_name
+    return None
+
+
 def init_state():
     """初始化状态"""
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -188,13 +233,19 @@ def parse_user_input(user_input: str, state: dict) -> dict:
             theme_match = re.search(r'历史素材\s*[:：]?\s*(\w+)', part)
             if theme_match:
                 state["params"]["theme"] = theme_match.group(1)
+        elif '画面' in part or '视觉' in part:
+            # 解析中文风格名称：画面：情感励志风格 → emotion
+            niche = _parse_chinese_niche(part)
+            if niche:
+                state["params"]["niche"] = niche
+                log(f"设置视觉风格: {niche}")
         elif '风格' in part or 'style' in part.lower():
             # 解析风格参数：风格:viral 或 style:viral
             match = re.search(r'(?:风格|style)[:：]?\s*(\w+)', part, re.IGNORECASE)
             if match:
                 niche = match.group(1).lower()
                 # 验证风格是否存在
-                valid_niches = ['general', 'viral', 'emotion', 'knowledge', 'horror', 'tech']
+                valid_niches = ['general', 'viral', 'emotion', 'knowledge', 'horror', 'tech', 'business']
                 if niche in valid_niches:
                     state["params"]["niche"] = niche
                     log(f"设置视觉风格: {niche}")

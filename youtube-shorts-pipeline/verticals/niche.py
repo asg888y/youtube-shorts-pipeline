@@ -156,6 +156,109 @@ def get_visual_subjects(profile: dict) -> dict:
     }
 
 
+def get_scene_modes(profile: dict) -> dict:
+    """Get scene modes for luxury/contrast visual styling.
+
+    Returns dict with:
+    - enabled: bool (whether scene_modes is configured)
+    - modes: dict of mode_name -> mode_config
+    - strategy: str (auto/luxury_only/contrast_only/intercut)
+    """
+    visuals = profile.get("visuals", {})
+    scene_modes = visuals.get("scene_modes", {})
+
+    if not scene_modes:
+        return {
+            "enabled": False,
+            "modes": {},
+            "strategy": "auto",
+        }
+
+    strategy = visuals.get("scene_strategy", "auto")
+
+    return {
+        "enabled": True,
+        "modes": scene_modes,
+        "strategy": strategy,
+    }
+
+
+def get_scene_keywords(profile: dict, mode: str = None) -> list[str]:
+    """Get scene keywords for a specific mode (luxury/contrast).
+
+    If mode is None and scene_strategy is set, picks based on strategy.
+    Returns list of keywords for b-roll prompt injection.
+    """
+    scene_config = get_scene_modes(profile)
+
+    if not scene_config["enabled"]:
+        return []
+
+    modes = scene_config["modes"]
+    strategy = scene_config["strategy"]
+
+    # Determine which mode to use
+    if mode:
+        target_mode = mode
+    elif strategy == "luxury_only":
+        target_mode = "luxury"
+    elif strategy == "contrast_only":
+        target_mode = "contrast"
+    else:
+        # auto or intercut: randomly pick one
+        import random
+        target_mode = random.choice(list(modes.keys()))
+
+    if target_mode not in modes:
+        return []
+
+    mode_config = modes[target_mode]
+    keywords = []
+
+    # Collect keywords from various fields
+    if "keywords" in mode_config:
+        keywords.extend(mode_config["keywords"])
+    if "locations" in mode_config:
+        keywords.extend(mode_config["locations"])
+    if "characters" in mode_config:
+        keywords.extend(mode_config["characters"])
+    if "props" in mode_config:
+        keywords.extend(mode_config["props"])
+
+    return keywords[:10]  # Limit to 10 keywords
+
+
+def get_scene_style(profile: dict, mode: str = None) -> dict:
+    """Get scene style info (color, lighting, mood) for a specific mode."""
+    scene_config = get_scene_modes(profile)
+
+    if not scene_config["enabled"]:
+        return {}
+
+    modes = scene_config["modes"]
+    strategy = scene_config["strategy"]
+
+    if mode:
+        target_mode = mode
+    elif strategy == "luxury_only":
+        target_mode = "luxury"
+    elif strategy == "contrast_only":
+        target_mode = "contrast"
+    else:
+        import random
+        target_mode = random.choice(list(modes.keys()))
+
+    if target_mode not in modes:
+        return {}
+
+    mode_config = modes[target_mode]
+    return {
+        "color": mode_config.get("color", ""),
+        "lighting": mode_config.get("lighting", ""),
+        "mood": mode_config.get("mood", ""),
+    }
+
+
 def get_voice_config(profile: dict, provider: str = "edge_tts", lang: str = "en") -> dict:
     """Get voice configuration for the specified provider and language."""
     voice = profile.get("voice", {})

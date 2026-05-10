@@ -250,7 +250,7 @@ def _fallback_frame(i: int, out_dir: Path, theme: str = None, niche: str = None)
     return path
 
 
-def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme: str = None, niche: str = None) -> list[Path]:
+def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme: str = None, niche: str = None, job_id: str = None) -> list[Path]:
     """Generate b-roll frames via RunningHub API, with fallback.
 
     Args:
@@ -259,18 +259,24 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
         use_local: If True, use local assets only (no API calls)
         theme: Optional theme for local assets (e.g., "military", "tech")
         niche: Optional niche/style for style-specific assets (e.g., "viral", "emotion")
+        job_id: Optional job ID for naming (e.g., "1778384421")
 
     Returns:
         List of generated frame paths
     """
+    from datetime import datetime
+
     # 上限20张
     prompts = prompts[:20]
     num_frames = len(prompts)
     frames = []
 
+    # 确定风格（默认general）
+    niche = niche or "general"
+
     # 如果指定使用本地素材，直接返回历史素材
     if use_local:
-        log(f"使用历史素材（风格: {niche or '通用'}, 主题: {theme or '通用'}）...")
+        log(f"使用历史素材（风格: {niche}, 主题: {theme or '通用'}）...")
         for i in range(num_frames):
             frames.append(_fallback_frame(i, out_dir, theme, niche))
         return frames
@@ -282,8 +288,13 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
             frames.append(_fallback_frame(i, out_dir, theme, niche))
         return frames
 
+    # 生成日期后缀
+    date_suffix = datetime.now().strftime("%Y%m%d")
+
     for i, prompt in enumerate(prompts):
-        out_path = out_dir / f"broll_{i}.png"
+        # 命名规则：风格_日期_序号.png（如 business_20260510_01.png）
+        filename = f"{niche}_{date_suffix}_{i:02d}.png"
+        out_path = out_dir / filename
         log(f"Generating b-roll frame {i+1}/{num_frames} via RunningHub...")
 
         try:
@@ -301,6 +312,13 @@ def generate_broll(prompts: list, out_dir: Path, use_local: bool = False, theme:
             img = img.crop((left, top, left + target_w, top + target_h))
             img.save(out_path)
             frames.append(out_path)
+
+            # 同时保存到风格素材库（用于后续复用）
+            local_assets_dir = Path(__file__).parent.parent / "local_assets" / "images" / niche
+            local_assets_dir.mkdir(parents=True, exist_ok=True)
+            library_path = local_assets_dir / filename
+            shutil.copy2(out_path, library_path)
+            log(f"  已保存到素材库: {niche}/{filename}")
 
         except Exception as e:
             log(f"Frame {i+1} failed: {e} — using fallback")

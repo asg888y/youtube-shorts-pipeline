@@ -1,0 +1,163 @@
+name: business
+display_name: "商业风格"
+
+script:
+  tone: "自信、野心、阶层对比、财富冲击"
+  pacing: "快节奏、短句、信息密集、每句都有画面感"
+  word_count: "120 to 160"
+  sentence_style: "短句为主，每句不超过15字，避免长句"
+
+  hooks:
+    - id: wealth_shock
+      template: "你知道{topic}有多赚钱吗？这个数字让我窒息..."
+      when: "有财富/收入数据时"
+    - id: class_gap
+      template: "有人问我，{topic}。我沉默了很久..."
+      when: "有阶层/社会话题时"
+    - id: success_story
+      template: "从{low}到{high}，他只做对了一件事..."
+      when: "有成功案例时"
+    - id: luxury_reveal
+      template: "我第一次走进{place}，才明白什么叫..."
+      when: "有奢华场景时"
+    - id: contrast_hit
+      template: "一边是{luxury}，另一边是{poverty}。这就是现实..."
+      when: "有对比内容时"
+
+  cta_variants:
+    - "转发给正在努力的人。"
+    - "评论区告诉我，你选哪条路。"
+    - "关注我，看不一样的世界。"
+    - "点赞收藏，下次找得到。"
+    - "你身边有这样的故事吗？"
+
+  forbidden_phrases:
+    - "大家好"
+    - "今天我们来聊聊"
+    - "众所周知"
+    - "首先其次最后"
+    - "喜欢的朋友点个赞"
+    - "感谢观看"
+
+  structure:
+    opening: "前3秒必须有视觉冲击，奢华或反差画面"
+    middle: "场景穿插，每15秒一个画面转折"
+    closing: "情绪高潮+强CTA，引导互动"
+
+visuals:
+  style: "电影级质感、高对比度、奢华与反差并存"
+  mood: "野心、权力、阶层张力"
+
+  # 场景模式 - 奢华与反差
+  scene_modes:
+    luxury:
+      keywords:
+        - "豪车内饰"
+        - "游艇甲板"
+        - "私人飞机舱内"
+        - "直升机俯瞰城市"
+        - "顶层公寓落地窗"
+        - "CBD天际线夜景"
+        - "银行金库"
+        - "私人会所"
+        - "酒庄品酒室"
+        - "高尔夫球场"
+        - "豪华酒店大堂"
+        - "摩天楼办公室"
+      characters:
+        - "商务精英男性"
+        - "性感美女"
+        - "老钱风穿搭"
+        - "奢侈品配饰特写"
+        - "商务时尚穿搭"
+      props:
+        - "雪茄特写"
+        - "名表手腕特写"
+        - "堆叠的现金"
+        - "红酒杯"
+        - "香槟塔"
+        - "名牌包"
+      color: "金色/深蓝/黑色调，高饱和，电影级光影"
+      lighting: "暖色调主光，轮廓光，电影感"
+      mood: "奢华、权力、成功"
+    contrast:
+      keywords:
+        - "破旧老街"
+        - "低饱和柏油路"
+        - "老旧菜市场"
+        - "低矮民宅巷子"
+        - "老公园长椅"
+        - "老旧火车站台"
+        - "拥挤地铁车厢"
+        - "公交车站"
+        - "小店排队人群"
+      characters:
+        - "普通市民"
+        - "打工人群"
+        - "疲惫的面孔"
+      props:
+        - "老旧的士"
+        - "拥挤公交"
+        - "塑料袋购物"
+        - "路边摊"
+      color: "低饱和，冷灰/暗绿色调，颗粒感"
+      lighting: "自然光，阴天感，纪实风格"
+      mood: "底层、挣扎、现实"
+
+  # 场景策略: auto(自动匹配)/luxury_only/contrast_only/intercut(穿插剪辑)
+  scene_strategy: "intercut"
+
+  subjects:
+    prefer:
+      - "中国人面孔"
+      - "亚洲人特征"
+      - "奢华场景"
+      - "反差场景"
+      - "人物表情特写"
+      - "对比画面"
+      - "动态场景"
+    avoid:
+      - "外国人面孔"
+      - "欧美人特征"
+      - "平淡办公场景"
+      - "模糊画面"
+      - "过于温馨的场景"
+
+  prompt_suffix: "中国人面孔，亚洲人特征，电影级质感，高对比度，商业大片风格"
+
+voice:
+  pace: "快，约175 wpm"
+  energy: "自信、有野心、有感染力"
+  style: "情绪化、有起伏、略带磁性"
+  suggested_voices:
+    dashscope: "longanyang"
+    edge_tts: "zh-CN-YunxiNeural"
+
+captions:
+  highlight_color: "#FFD700"
+  text_color: "#FFFFFF"
+  font_size: 96
+  font_weight: "bold"
+  position: "center"
+  words_per_group: 3
+
+music:
+  mood: "史诗感、节奏感强、有野心"
+  energy: "high"
+  duck_volume_speech: 0.08
+  duck_volume_gap: 0.20
+
+thumbnail:
+  style: "高对比度、奢华元素、大字标题"
+  text_position: "center"
+  guidelines:
+    - "标题不超过5个字"
+    - "必须有奢华或反差视觉焦点"
+    - "金色/黑色为主色调"
+
+discovery:
+  hot_sources:
+    - "微博热搜"
+    - "抖音热点"
+    - "知乎热榜"
+    - "小红书财富话题"

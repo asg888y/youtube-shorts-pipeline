@@ -128,8 +128,9 @@ def load_task_state(job_id: str) -> dict:
 
 def generate_broll_prompts_from_script(script: str, count: int, niche: str = "general") -> list:
     """从文案生成B-roll提示词，根据风格配置调整视觉风格"""
+    import json
     from verticals.llm import call_llm
-    from verticals.niche import load_niche, get_visual_context, get_visual_prompt_suffix
+    from verticals.niche import load_niche, get_visual_context, get_visual_prompt_suffix, get_scene_modes, get_scene_keywords, get_scene_style
 
     # 加载风格配置
     profile = load_niche(niche)
@@ -143,37 +144,75 @@ def generate_broll_prompts_from_script(script: str, count: int, niche: str = "ge
     prefer = subjects.get("prefer", [])
     avoid = subjects.get("avoid", [])
 
+    # 场景模式支持
+    scene_config = get_scene_modes(profile)
+    scene_keywords = []
+    scene_style_info = {}
+    if scene_config["enabled"]:
+        scene_keywords = get_scene_keywords(profile)
+        scene_style_info = get_scene_style(profile)
+
     # 构建风格指导
-    style_guide = f"""
-视觉风格: {style}
-氛围基调: {mood}
-"""
+    style_guide = f"视觉风格: {style}\n氛围基调: {mood}\n"
     if prefer:
-        style_guide += f"优先画面: {', '.join(prefer)}\n"
+        style_guide += f"优先画面: {', '.join(prefer[:5])}\n"
     if avoid:
-        style_guide += f"避免画面: {', '.join(avoid)}\n"
+        style_guide += f"避免画面: {', '.join(avoid[:3])}\n"
 
-    prompt = f"""根据以下文案内容，生成{count}个视觉画面描述，用于AI生成图片。
+    # 场景模式指导
+    if scene_keywords:
+        style_guide += f"场景关键词: {', '.join(scene_keywords[:5])}\n"
+    if scene_style_info.get("color"):
+        style_guide += f"场景色调: {scene_style_info['color']}\n"
 
-文案：
-{script}
+    # 使用JSON格式输出，避免LLM返回说明文字
+    prompt = f"""生成{count}个视觉画面描述，用于AI图片生成。
+
+文案：{script}
 
 {style_guide}
-要求：
-1. 每个画面描述要具体、视觉化
-2. 画面要与文案内容相关
-3. 风格统一：{style}
-4. 每个描述一行，不要编号
-5. 每个描述末尾添加风格后缀：{prompt_suffix}
 
-直接输出{count}行画面描述："""
+输出格式（必须是有效的JSON数组，不要包含任何其他文字）：
+["画面描述1", "画面描述2", ...]
+
+要求：
+- 每个描述必须具体、视觉化（描述场景、人物、动作、光影）
+- 每个描述末尾添加：{prompt_suffix}
+- 不要输出任何说明文字，只输出JSON数组"""
 
     try:
-        result = call_llm(prompt, max_tokens=800)
-        prompts = [p.strip() for p in result.strip().split('\n') if p.strip()]
+        result = call_llm(prompt, max_tokens=1500)
+
+        # 尝试解析JSON
+        result = result.strip()
+
+        # 移除可能的markdown代码块标记
+        if "```" in result:
+            # 提取代码块内容
+            parts = result.split("```")
+            for part in parts:
+                if "[" in part and "]" in part:
+                    result = part
+                    if result.startswith("json"):
+                        result = result[4:].strip()
+                    break
+
+        # 提取JSON数组
+        start = result.find("[")
+        end = result.rfind("]") + 1
+        if start >= 0 and end > start:
+            result = result[start:end]
+
+        prompts = json.loads(result)
+        if isinstance(prompts, list):
+            prompts = [str(p).strip() for p in prompts if p]
+        else:
+            prompts = []
+
         # 确保数量正确
         while len(prompts) < count:
             prompts.append(f"Cinematic scene, dramatic lighting, {prompt_suffix}")
+        log(f"生成了 {len(prompts)} 个画面描述")
         return prompts[:count]
     except Exception as e:
         log(f"生成B-roll提示词失败: {e}")
@@ -336,35 +375,13 @@ def make_video(
 
     prompts = draft.get("broll_prompts", ["Cinematic scene"] * total_media_count)
 
-    # 素材数量校验和警告（不自动覆盖用户指定值）
-    script_text = draft.get("script", "")
-    if script_text:
-        # 估算音频时长（中文约3-4字/秒）
-        estimated_duration = len(script_text) / 3.5
-        required_media = math.ceil(estimated_duration / switch_seconds)
+    # 补充 prompts（确保总数足够）
+    while len(prompts) < total_media_count:
+        prompts.append(f"Cinematic scene, dramatic lighting, style {len(prompts)+1}")
 
-        if total_media_count < required_media:
-            log(f"")
-            log(f"⚠️  素材数量警告")
-            log(f"   文案长度: {len(script_text)}字")
-            log(f"   预估时长: {estimated_duration:.0f}秒")
-            log(f"   切换间隔: {switch_seconds}秒")
-            log(f"   用户指定: {total_media_count}个素材 (图片{image_count}+视频{video_count})")
-            log(f"   建议数量: {required_media}个")
-            log(f"   每个素材将播放: {estimated_duration/total_media_count:.1f}秒")
-            log(f"")
-            log(f"⚠️  素材不足可能导致视频被截断！")
-            log(f"   建议：增加素材数量或缩短文案")
-            log(f"")
-            # 不自动覆盖用户指定值，让用户决定
-
-            # 补充 prompts（确保总数足够）
-            while len(prompts) < total_media_count:
-                prompts.append(f"Cinematic scene, dramatic lighting, style {len(prompts)+1}")
-
-            # 更新 params
-            params["image_count"] = image_count
-            params["video_count"] = video_count
+    # 更新 params
+    params["image_count"] = image_count
+    params["video_count"] = video_count
 
     # 2. 生成素材（图片+视频混合）
     video_segments = []
@@ -406,7 +423,7 @@ def make_video(
             img_prompts.append(img_prompts[-1] if img_prompts else "Cinematic scene")
 
         try:
-            frames = generate_broll(img_prompts[:image_count], work_dir, niche=niche)
+            frames = generate_broll(img_prompts[:image_count], work_dir, niche=niche, job_id=job_id)
             image_frames = frames
             # 检查是否全部成功
             actual_count = len([f for f in frames if not f.name.startswith("fallback_")])
@@ -498,16 +515,14 @@ def make_video(
     music_path = music_result.get("track_path")
     duck_filter = music_result.get("duck_filter")
 
-    # 6. 合成视频（使用switch_seconds控制切换节奏）
+    # 6. 合成视频（以音频时长为准）
     log("合成视频...")
     stages["assemble"]["status"] = "in_progress"
     save_task_state(job_id, topic, "assemble", stages, params)
 
-    # 计算总素材数和总时长
-    total素材 = len(video_segments) + len(image_frames)
-    total_duration_needed = total素材 * switch_seconds
-
-    log(f"音频时长: {audio_duration}s, 目标时长: {total_duration_needed}s (素材数:{total素材}, 切换:{switch_seconds}s)")
+    # 视频时长 = 音频时长（每个素材播放时长 = 音频时长 / 素材数量）
+    total_segments = len(video_segments) + len(image_frames)
+    log(f"音频时长: {audio_duration:.1f}s, 素材数: {total_segments}, 每个播放: {audio_duration/total_segments:.1f}s")
 
     # 合成策略：混合视频片段和图片动画
     final_video = _assemble_mixed(
@@ -522,6 +537,7 @@ def make_video(
         job_id=job_id,
         switch_seconds=switch_seconds,
         audio_duration=audio_duration,
+        niche=niche,
     )
 
     stages["assemble"]["status"] = "completed"
@@ -605,13 +621,24 @@ def _assemble_mixed(
     job_id: str,
     switch_seconds: float,
     audio_duration: float,
+    niche: str = "general",
 ) -> Path:
     """混合合成视频片段和图片动画"""
 
+    from datetime import datetime
     from verticals.broll import animate_frame
     from verticals.config import VIDEO_WIDTH, VIDEO_HEIGHT
 
-    output = MEDIA_DIR / f"verticals_{job_id}_zh.mp4"
+    # 成品视频保存到风格目录下的"成品视频"文件夹
+    # 命名规则：风格_日期_任务ID.mp4（如 business_20260510_1778384421.mp4）
+    date_suffix = datetime.now().strftime("%Y%m%d")
+    output_dir = PROJECT_DIR / "local_assets" / "images" / niche / "成品视频"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_filename = f"{niche}_{date_suffix}_{job_id}.mp4"
+    output = output_dir / output_filename
+
+    # 同时在media目录保留一份（用于临时访问）
+    media_output = MEDIA_DIR / f"verticals_{job_id}_zh.mp4"
 
     # 生成所有动画片段
     animated_segments = []
@@ -718,6 +745,12 @@ def _assemble_mixed(
         subprocess.run(cmd_no_sub, check=True)
 
     log(f"视频合成完成: {output}")
+
+    # 复制到media目录（用于临时访问）
+    import shutil
+    shutil.copy2(output, media_output)
+    log(f"已复制到: {media_output}")
+
     return output
 
 

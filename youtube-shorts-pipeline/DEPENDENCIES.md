@@ -70,6 +70,7 @@
 
 | 日期 | 文件 | 修改内容 |
 |------|------|----------|
+| 2026-05-08 | verticals/llm.py | MiniMax M2.7 Anthropic兼容接口 |
 | 2026-05-08 | auto-hotvideo.py | 使用ffmpeg-full替代标准ffmpeg |
 | 2026-05-08 | auto-hotvideo.py | 修复switch_seconds参数无效 |
 | 2026-05-07 | broll.py | RunningHub OpenAPI v2端点 |

@@ -16,6 +16,7 @@ NICHE_MUSIC_CONFIG = {
     "knowledge": {"subdir": "knowledge", "mood": "professional clear informative"},
     "horror": {"subdir": "horror", "mood": "dark suspense mysterious"},
     "tech": {"subdir": "tech", "mood": "modern electronic futuristic"},
+    "business": {"subdir": "viral", "mood": "epic ambitious powerful"},
     "general": {"subdir": "general", "mood": "ambient neutral"},
     "multi_empty_bureau": {"subdir": "tech", "mood": "tense serious"},
 }
