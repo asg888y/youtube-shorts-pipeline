@@ -67,7 +67,7 @@ voice:
 captions:
   highlight_color: "#00BFFF"
   text_color: "#FFFFFF"
-  font_size: 82  # 加大20% (原68)
+  font_size: 125  # 锁定值，禁止修改
   font_weight: "bold"
   position: "lower_third"
   words_per_group: 5

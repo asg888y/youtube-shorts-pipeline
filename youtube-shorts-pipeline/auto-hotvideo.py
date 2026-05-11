@@ -132,6 +132,10 @@ def generate_broll_prompts_from_script(script: str, count: int, niche: str = "ge
     from verticals.llm import call_llm
     from verticals.niche import load_niche, get_visual_context, get_visual_prompt_suffix, get_scene_modes, get_scene_keywords, get_scene_style
 
+    # count为0时，不生成prompts
+    if count <= 0:
+        return []
+
     # 加载风格配置
     profile = load_niche(niche)
     visual_ctx = get_visual_context(profile)
@@ -242,6 +246,7 @@ def make_video(
     skip_approval: bool = False,
     direct_script: str = None,
     script_source: str = "hot",
+    use_local: bool = False,
 ) -> dict:
     """
     生成视频
@@ -257,6 +262,7 @@ def make_video(
         skip_approval: 是否跳过审批（用于已获批准的继续执行）
         direct_script: 直接输入的文案（跳过热点改写）
         script_source: 文案来源（hot/direct/transcribe）
+        use_local: 使用历史素材（不生成新素材）
 
     Returns:
         dict: 包含video_path, script, title等信息，或需要审批的信息
@@ -341,23 +347,23 @@ def make_video(
 
     # 根据文案来源决定生成方式
     total_media_count = image_count + video_count  # 总素材数 = 图片 + 视频
-    if script_source == "direct" and direct_script:
-        # 直接使用用户输入的文案
-        log(f"使用直接输入的文案: {direct_script[:50]}...")
+
+    # 永久禁用LLM写文案 - 直接使用用户输入
+    if direct_script:
         script = direct_script
-        title = topic if topic else "短视频"
-        prompts = generate_broll_prompts_from_script(script, total_media_count, niche)
-        draft = {
-            "job_id": job_id,
-            "script": script,
-            "youtube_title": title,
-            "broll_prompts": prompts,
-        }
+        log(f"使用用户输入的文案: {script[:50]}...")
     else:
-        # 从热点生成脚本
-        log(f"生成脚本: {topic}")
-        draft = generate_draft(topic, "", niche=niche, platform="shorts", viral_mode=False)
-        draft["job_id"] = job_id
+        script = topic if topic else "短视频内容"
+        log(f"使用主题作为文案: {script[:50]}...")
+
+    title = topic if topic else "短视频"
+    prompts = generate_broll_prompts_from_script(script, total_media_count, niche)
+    draft = {
+        "job_id": job_id,
+        "script": script,
+        "youtube_title": title,
+        "broll_prompts": prompts,
+    }
 
     # 保存draft
     draft_path = DRAFTS_DIR / f"{job_id}.json"
@@ -495,7 +501,7 @@ def make_video(
         words_per_group=caption_words_per_group,
         font_size=caption_font_size,
     )
-    log(f"字幕配置: font_size={caption_font_size}, highlight={caption_highlight}")
+    log(f"字幕配置: font_size=125 (锁定), highlight={caption_highlight}")
     ass_path = captions_result.get("ass_path")
     srt_path = captions_result.get("srt_path")
 
@@ -515,8 +521,29 @@ def make_video(
     stages["assemble"]["status"] = "in_progress"
     save_task_state(job_id, topic, "assemble", stages, params)
 
-    # 视频时长 = 音频时长（每个素材播放时长 = 音频时长 / 素材数量）
+    # 视频时长 = 音频时长
     total_segments = len(video_segments) + len(image_frames)
+
+    # 素材数为0时，自动使用历史素材
+    if total_segments == 0:
+        log("素材数为0，自动使用历史素材...")
+        # 从历史work目录查找
+        for work_dir_old in MEDIA_DIR.glob("work_*"):
+            if work_dir_old != work_dir:
+                for img in work_dir_old.glob("*.png"):
+                    import shutil
+                    dst = work_dir / f"local_{len(image_frames)}.png"
+                    shutil.copy2(img, dst)
+                    image_frames.append(dst)
+                    if len(image_frames) >= 3:
+                        break
+            if len(image_frames) >= 3:
+                break
+        total_segments = len(image_frames)
+        # 更新media_order
+        media_order = ["image"] * total_segments
+        log(f"使用了 {total_segments} 张历史素材")
+
     log(f"音频时长: {audio_duration:.1f}s, 素材数: {total_segments}, 每个播放: {audio_duration/total_segments:.1f}s")
 
     # 合成策略：混合视频片段和图片动画
@@ -632,9 +659,6 @@ def _assemble_mixed(
     output_filename = f"{niche}_{date_suffix}_{job_id}.mp4"
     output = output_dir / output_filename
 
-    # 同时在media目录保留一份（用于临时访问）
-    media_output = MEDIA_DIR / f"verticals_{job_id}_zh.mp4"
-
     # 生成所有动画片段
     animated_segments = []
     effects = ["zoom_in", "pan_right", "zoom_out"]
@@ -716,9 +740,9 @@ def _assemble_mixed(
     # 字幕滤镜（正确转义）
     vf_parts = []
     if ass_path and Path(ass_path).exists():
-        # ffmpeg ass滤镜路径转义规则
+        # ffmpeg ass滤镜路径转义规则：冒号需要转义为\:
         escaped_ass = str(ass_path).replace("\\", "/").replace(":", "\\:")
-        vf_parts.append(f"ass='{escaped_ass}'")
+        vf_parts.append(f"ass={escaped_ass}")
 
     if vf_parts:
         cmd += ["-vf", ",".join(vf_parts)]
@@ -731,30 +755,13 @@ def _assemble_mixed(
     ]
 
     log(f"执行ffmpeg合成...")
+    log(f"ffmpeg命令: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         log(f"ffmpeg错误: {result.stderr[:500]}")
-        # 尝试不带字幕合成
-        log("尝试不带字幕合成...")
-        cmd_no_sub = [FFMPEG, "-i", str(merged_video), "-i", str(vo_path)]
-        if music_path:
-            cmd_no_sub += ["-stream_loop", "-1", "-i", str(music_path), "-filter_complex", audio_filter]
-            cmd_no_sub += ["-map", "0:v", "-map", "[aout]"]
-        else:
-            cmd_no_sub += ["-map", "0:v", "-map", "1:a"]
-        cmd_no_sub += [
-            "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-shortest",
-            str(output), "-y"
-        ]
-        subprocess.run(cmd_no_sub, check=True)
+        raise RuntimeError(f"视频合成失败: {result.stderr[:300]}")
 
     log(f"视频合成完成: {output}")
-
-    # 复制到media目录（用于临时访问）
-    import shutil
-    shutil.copy2(output, media_output)
-    log(f"已复制到: {media_output}")
 
     return output
 
@@ -820,11 +827,11 @@ def cmd_make(args):
         except:
             pass
 
-    # 优先使用状态文件中的参数，命令行参数作为备选
-    niche = state_params.get("niche") or getattr(args, 'niche', 'general')
-    switch_seconds = state_params.get("switch_seconds") or getattr(args, 'switch', 2.0)
-    image_count = state_params.get("image_count") or getattr(args, 'images', 3)
-    video_count = state_params.get("video_count") or getattr(args, 'videos', 0)
+    # 命令行参数优先，状态文件参数作为备选
+    niche = getattr(args, 'niche', None) or state_params.get("niche") or 'general'
+    switch_seconds = getattr(args, 'switch', None) or state_params.get("switch_seconds") or 2.0
+    image_count = getattr(args, 'images', None) or state_params.get("image_count") or 0
+    video_count = getattr(args, 'videos', None) or state_params.get("video_count") or 0
 
     result = make_video(
         topic=args.topic,
@@ -986,7 +993,7 @@ def main():
     p_make.add_argument("--niche", default="general", help="内容风格 (general/viral/emotion/knowledge/horror/tech)")
     p_make.add_argument("--video", action="store_true", help="使用视频API")
     p_make.add_argument("--switch", type=float, default=2.0, help="场景切换时长(秒)")
-    p_make.add_argument("--images", type=int, default=3, help="图片数量")
+    p_make.add_argument("--images", type=int, default=0, help="图片数量")
     p_make.add_argument("--videos", type=int, default=0, help="视频片段数量")
     p_make.add_argument("--start-video", action="store_true", help="开头使用视频")
     p_make.add_argument("--skip-approval", action="store_true", help="跳过审批")

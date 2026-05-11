@@ -15,7 +15,6 @@ from .config import VOICE_ID_EN, VOICE_ID_HI, get_elevenlabs_key, run_cmd, load_
 from .log import log
 from .retry import with_retry
 
-
 # ─────────────────────────────────────────────────────
 # Edge TTS — free, cross-platform, 300+ voices
 # ─────────────────────────────────────────────────────
@@ -129,28 +128,27 @@ def _generate_say(script: str, out_dir: Path, lang: str = "en") -> Path:
     # Use Alex voice for English, default for others
     voice = ["-v", "Alex"] if lang.startswith("en") else []
     run_cmd(["say"] + voice + ["-o", str(out_path), script])
-    run_cmd([
-        "ffmpeg", "-i", str(out_path), "-acodec", "libmp3lame",
+    run_cmd(
+        ["ffmpeg", "-i", str(out_path), "-acodec", "libmp3lame",
         str(mp3_path), "-y", "-loglevel", "quiet",
     ])
     return mp3_path
 
 
 # ─────────────────────────────────────────────────────
-# DashScope (百炼) CosyVoice TTS — Alibaba Cloud
+# DashScope (百炼) TTS — Alibaba Cloud
 # ─────────────────────────────────────────────────────
 
-# CosyVoice voices for different languages/emotions
-COSYVOICE_VOICES = {
-    "en": "longanyang",  # English male voice
-    "zh": "longanyang",  # Chinese male voice
-    "hi": "longanyang",
-    "longanyang": "longanyang",  # Male voice
-    "longanhuan": "longanhuan",  # Female voice
-}
+# 从config.py读取TTS配置
+from .config import TTS_MODEL, TTS_VOICE_ID, TTS_SPEECH_RATE
 
-# Emotion mapping for CosyVoice
-COSYVOICE_EMOTIONS = ["fearful", "angry", "sad", "happy", "neutral"]
+# 百炼 TTS 配置 - 自定义音色 longsanshu_v3
+# 模型: qwen3-tts-vd-2026-01-26
+# 音色: qwen-tts-vd-bailian-voice-20260510160239061-ba05
+# 语速: 1.0 (正常)
+DASHSCOPE_TTS_MODEL = TTS_MODEL
+DASHSCOPE_VOICE_ID = TTS_VOICE_ID
+DASHSCOPE_SPEECH_RATE = TTS_SPEECH_RATE
 
 
 def _get_dashscope_key() -> str:
@@ -160,13 +158,11 @@ def _get_dashscope_key() -> str:
 
 
 @with_retry(max_retries=3, base_delay=2.0)
-def _generate_cosyvoice(script: str, out_dir: Path, lang: str, voice: str = "longanyang", emotion: str = "fearful") -> Path:
-    """Generate voiceover via DashScope CosyVoice-v3-plus TTS.
+def _generate_dashscope_tts(script: str, out_dir: Path, lang: str) -> Path:
+    """Generate voiceover via DashScope 百炼 TTS.
 
-    Uses dashscope SDK SpeechSynthesizer with:
-    - voice: longanyang (男) / longanhuan (女)
-    - emotion: fearful / angry / sad
-    - speed: 1.3 (default)
+    模型: qwen3-tts-vd-2026-01-26
+    音色: qwen-tts-vd-bailian-voice-20260510160239061-ba05
     """
     api_key = _get_dashscope_key()
     if not api_key:
@@ -177,27 +173,41 @@ def _generate_cosyvoice(script: str, out_dir: Path, lang: str, voice: str = "lon
     os.environ["DASHSCOPE_API_KEY"] = api_key
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
-    from dashscope.audio.tts_v2 import SpeechSynthesizer, AudioFormat
+    from dashscope.audio.qwen_tts import SpeechSynthesizer
 
-    voice_id = COSYVOICE_VOICES.get(voice, "longanyang")
-    out_path = out_dir / f"voiceover_{lang}.mp3"
+    out_path = out_dir / f"voiceover_{lang}.wav"
 
-    log(f"Generating {lang} voiceover via CosyVoice-v3-plus (voice: {voice_id}, speed: 1.3)...")
+    log(f"Generating {lang} voiceover via 百炼 TTS (model: {DASHSCOPE_TTS_MODEL}, voice: {DASHSCOPE_VOICE_ID})...")
 
-    synthesizer = SpeechSynthesizer(
-        model="cosyvoice-v3-plus",
-        voice=voice_id,
-        format=AudioFormat.MP3_22050HZ_MONO_256KBPS,
-        speech_rate=1.3,  # 1.3x speed
+    # 使用SpeechSynthesizer.call静态方法
+    response = SpeechSynthesizer.call(
+        model=DASHSCOPE_TTS_MODEL,
+        text=script,
+        voice=DASHSCOPE_VOICE_ID,
     )
 
-    audio_data = synthesizer.call(script)
+    if not response.output:
+        raise RuntimeError("百炼 TTS returned empty audio")
 
-    if not audio_data:
-        raise RuntimeError("CosyVoice returned empty audio")
+    # 从URL下载音频
+    audio_info = response.output.get('audio', {})
+    audio_url = audio_info.get('url', '')
+    audio_data = audio_info.get('data', '')
 
-    out_path.write_bytes(audio_data)
-    log(f"CosyVoice voiceover saved: {out_path.name}")
+    if audio_url:
+        import requests
+        r = requests.get(audio_url)
+        out_path.write_bytes(r.content)
+        log(f"百炼 TTS voiceover saved: {out_path.name}")
+        return out_path
+    elif audio_data:
+        import base64
+        audio_bytes = base64.b64decode(audio_data)
+        out_path.write_bytes(audio_bytes)
+        log(f"百炼 TTS voiceover saved: {out_path.name}")
+        return out_path
+    else:
+        raise RuntimeError("百炼 TTS returned empty audio data")
     return out_path
 
 
@@ -208,9 +218,8 @@ def _generate_cosyvoice(script: str, out_dir: Path, lang: str, voice: str = "lon
 def get_tts_provider(name: str | None = None) -> str:
     """Resolve which TTS provider to use.
 
-    强制使用 DashScope (百炼) CosyVoice 作为唯一 TTS 提供商。
+    强制使用 DashScope (百炼) 作为唯一 TTS 提供商。
     """
-    # 强制返回 dashscope，忽略其他参数
     return "dashscope"
 
 
@@ -221,21 +230,19 @@ def generate_voiceover(
     provider: str | None = None,
     voice_config: dict | None = None,
 ) -> Path:
-    """Generate voiceover via DashScope CosyVoice (唯一 TTS 提供商).
+    """Generate voiceover via DashScope 百炼 TTS (唯一 TTS 提供商).
+
+    模型: qwen3-tts-vd-2026-01-26
+    音色: qwen-tts-vd-bailian-voice-20260510160239061-ba05
 
     Args:
         script: The voiceover text.
         out_dir: Directory to save the audio file.
         lang: Language code (en, zh, hi, etc.).
         provider: 忽略，强制使用 dashscope。
-        voice_config: Optional voice config (voice_id, emotion).
+        voice_config: 忽略，强制使用自定义音色。
 
     Returns:
         Path to the generated audio file.
     """
-    voice_config = voice_config or {}
-
-    # 强制使用 DashScope CosyVoice
-    voice = voice_config.get("voice_id", "longanyang")
-    emotion = voice_config.get("emotion", "fearful")
-    return _generate_cosyvoice(script, out_dir, lang, voice=voice, emotion=emotion)
+    return _generate_dashscope_tts(script, out_dir, lang)

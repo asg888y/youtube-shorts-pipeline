@@ -95,15 +95,17 @@ def cmd_produce(args):
         frames = [Path(f) for f in state.get_artifact("broll", "frames", [])]
 
     # Voiceover (niche-aware voice selection)
+    # 强制使用 dashscope 作为 TTS 提供商，音色配置必须匹配
     if force or not state.is_done("voiceover"):
+        actual_tts_provider = "dashscope"
         voice_config = get_voice_config(
             profile,
-            provider=tts_provider or "edge_tts",
+            provider=actual_tts_provider,
             lang=lang,
         )
         vo_path = generate_voiceover(
             script, work_dir, lang,
-            provider=tts_provider,
+            provider=actual_tts_provider,
             voice_config=voice_config,
         )
         state.complete_stage("voiceover", {"path": str(vo_path)})
@@ -118,6 +120,7 @@ def cmd_produce(args):
             vo_path, work_dir, lang,
             highlight_color=caption_config.get("highlight_color", "#FFFF00"),
             words_per_group=caption_config.get("words_per_group", 4),
+            font_size=caption_config.get("font_size", 86),
         )
         state.complete_stage("captions", {
             "srt_path": str(captions_result.get("srt_path", "")),

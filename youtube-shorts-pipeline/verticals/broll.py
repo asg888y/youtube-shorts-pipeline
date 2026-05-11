@@ -81,7 +81,7 @@ def _get_standard_color_frames() -> list[Path]:
 def _get_recent_generated_frames() -> list[Path]:
     """从最近生成的工作文件夹中提取素材"""
     import glob
-    media_dir = Path.home() / ".verticals" / "media"
+    from .config import MEDIA_DIR; media_dir = MEDIA_DIR
     if not media_dir.exists():
         return []
 
@@ -176,7 +176,7 @@ def _get_style_color_frames(niche: str = None) -> list[Path]:
 def _get_recent_generated_frames(niche: str = None) -> list[Path]:
     """从最近生成的工作文件夹中提取素材（可选按风格筛选）"""
     import glob
-    media_dir = Path.home() / ".verticals" / "media"
+    from .config import MEDIA_DIR; media_dir = MEDIA_DIR
     if not media_dir.exists():
         return []
 

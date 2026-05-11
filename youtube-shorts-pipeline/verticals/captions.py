@@ -79,8 +79,11 @@ def _generate_ass(words: list[dict], output_path: Path, video_width: int = 1080,
         video_height: Video height (default 1920 for vertical)
         highlight_color: Hex color for highlighted word (default yellow)
         group_size: Words per subtitle line (default 4)
-        font_size: Font size in points (default 86, 20% larger than original 72)
+        font_size: Font size in points (IGNORED - locked at 125)
     """
+    # ⚠️ 字号强制锁定为125，禁止修改！修改需用户文字确认"同意"
+    font_size = 125
+
     # ASS header
     margin_v = int(video_height * 0.25)  # ~75% down from top = 25% from bottom
     header = f"""[Script Info]
@@ -124,7 +127,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             parts = []
             for j, w in enumerate(group):
                 if j == active_idx:
-                    parts.append(f"{{\\c{ass_highlight}\\b1\\fs80}}{w['word']}{{\\r}}")
+                    parts.append(f"{{\\c{ass_highlight}\\b1}}{w['word']}{{\\r}}")
                 else:
                     parts.append(w["word"])
 
@@ -174,7 +177,7 @@ def generate_captions(
     lang: str = "en",
     highlight_color: str = "#FFFF00",
     words_per_group: int = 4,
-    font_size: int = 86,
+    font_size: int = 125,  # ⚠️ 锁定值125，禁止修改！修改需用户文字确认"同意"
 ) -> dict:
     """Generate captions: ASS (for burn-in) + SRT (for YouTube upload).
 
@@ -186,7 +189,7 @@ def generate_captions(
         lang: Language code (default "en")
         highlight_color: Hex color for highlighted word (default yellow)
         words_per_group: Words per subtitle line (default 4)
-        font_size: Font size in points (default 86, 20% larger than original 72)
+        font_size: Font size in points (LOCKED at 125, do not modify)
     """
     words = _whisper_word_timestamps(audio_path, lang)
 

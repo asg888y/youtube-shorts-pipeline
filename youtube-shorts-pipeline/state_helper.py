@@ -64,20 +64,20 @@ def init_state():
         "topic": None,
         "params": {
             "switch_seconds": 2,
-            "image_count": 3,
+            "image_count": 0,  # 默认0，不生成新素材
             "video_count": 0,
             "use_video_api": False,
             "start_with_video": False,
-            "use_local": False,      # 新增：是否使用历史素材
-            "theme": None,           # 新增：素材主题
-            "direct_script": None,   # 新增：直接输入的文案
-            "niche": "general"       # 新增：视觉风格
+            "use_local": True,       # 默认使用历史素材
+            "theme": None,
+            "direct_script": None,
+            "niche": "general"
         },
         "hot_topics": [],
         "selected_index": 0,
         "job_id": None,
         "video_path": None,
-        "script_source": None       # 新增：文案来源（hot/direct/transcribe）
+        "script_source": None
     }
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
     return state

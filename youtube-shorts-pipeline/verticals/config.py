@@ -12,9 +12,12 @@ from pathlib import Path
 # ─────────────────────────────────────────────────────
 SKILL_DIR = Path.home() / ".verticals"
 DRAFTS_DIR = SKILL_DIR / "drafts"
-MEDIA_DIR = SKILL_DIR / "media"
 LOGS_DIR = SKILL_DIR / "logs"
 CONFIG_FILE = SKILL_DIR / "config.json"
+
+# 工作目录使用项目内路径
+PROJECT_DIR = Path(__file__).parent.parent
+MEDIA_DIR = PROJECT_DIR / "local_assets" / "images"
 
 # ─────────────────────────────────────────────────────
 # Video constants
@@ -27,6 +30,14 @@ VIDEO_HEIGHT = 1920
 # ─────────────────────────────────────────────────────
 VOICE_ID_EN = os.environ.get("VOICE_ID_EN", "JBFqnCBsd6RMkjVDRZzb")  # George
 VOICE_ID_HI = os.environ.get("VOICE_ID_HI", "JBFqnCBsd6RMkjVDRZzb")
+
+# 百炼 TTS 配置 - 自定义音色 longsanshu_v3
+# 模型: qwen3-tts-vd-2026-01-26
+# 音色: qwen-tts-vd-bailian-voice-20260510160239061-ba05
+# 语速: 1.0 (正常)
+TTS_MODEL = os.environ.get("TTS_MODEL", "qwen3-tts-vd-2026-01-26")
+TTS_VOICE_ID = os.environ.get("TTS_VOICE_ID", "qwen-tts-vd-bailian-voice-20260510160239061-ba05")
+TTS_SPEECH_RATE = float(os.environ.get("TTS_SPEECH_RATE", "1.0"))
 
 STOPWORDS = {
     "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",
