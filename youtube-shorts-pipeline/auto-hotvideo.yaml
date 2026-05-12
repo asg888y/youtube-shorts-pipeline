@@ -1,11 +1,17 @@
 ---
 name: auto-hotvideo
-description: 视频生成工具 - 热点视频自动化管线
-version: 2.0.0
+description: 视频生成工具 - 直接输入文案生成视频
+version: 2.1.0
 project_dir: /Users/yezhong/youtube-shorts-pipeline
 ---
 
-# 视频生成工具 v2.0
+# 视频生成工具 v2.1
+
+## 功能说明
+
+**直接输入文案生成视频，无热点选题、无文案生成。**
+
+用户输入文案 → 直接生成视频
 
 ## 锁定参数
 
@@ -19,40 +25,33 @@ project_dir: /Users/yezhong/youtube-shorts-pipeline
 ## 执行命令
 
 ```bash
-cd /Users/yezhong/youtube-shorts-pipeline && python3 auto-hotvideo.py "$@"
+cd /Users/yezhong/youtube-shorts-pipeline && python3 auto-hotvideo.py make "文案" --skip-approval --json
 ```
+
+## 输入格式
+
+`【文案】（风格:xxx，图片:N）`
+
+- **文案**：【】内的内容，100%使用用户输入，禁止LLM改写
+- **风格**：business/viral/knowledge/emotion/horror/general（可选，默认general）
+- **图片**：0-10（可选，默认0）
 
 ## 执行流程
 
-### 第1步：解析输入
-
-用户输入：`【文案】（风格:xxx，图片:N）`
-
-- 【】内为文案，100%使用用户输入，禁止LLM改写
-- 风格：business/viral/knowledge/emotion/horror/general
-- 图片：0-10，默认0
-
-### 第2步：成本审批（仅当图片>0）
-
-显示成本，等待用户输入"同意"。
-
-其他任何字符一律无效，任务终止。
-
-### 第3步：执行
-
-```bash
-python3 auto-hotvideo.py make "【文案】" --skip-approval --json
-```
-
-成功→打开视频。失败→报错终止，禁止替代方案。
+1. 用户输入文案
+2. 直接执行生成（无热点选题、无文案生成）
+3. 成本审批（仅当图片>0）
+4. 生成视频
+5. 打开视频
 
 ## 禁止事项
 
 - 禁止LLM改写文案
+- 禁止热点选题
+- 禁止文案生成
 - 禁止默认生成新素材
 - 禁止绕过此配置直接调用管线
 - 禁止失败时使用替代方案
-- 禁止非"同意"审批
 
 ## 自动化模式
 
